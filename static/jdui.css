@@ -99,6 +99,11 @@
 .jdui-session-time{font-size:11px;color:rgba(0,0,0,0.2);font-weight:500;white-space:nowrap;margin-left:6px;flex-shrink:0;}
 .jdui-session-last{font-size:12px;color:rgba(60,60,67,0.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0.4px;font-family:'Inter','Noto Sans SC',sans-serif;}
 
+/* ── Session delete button ── */
+.jdui-session-del{background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:rgba(60,60,67,0.2);flex-shrink:0;opacity:0;transition:opacity .2s,color .2s,background .2s;}
+.session-item:hover .jdui-session-del{opacity:1;}
+.jdui-session-del:hover{color:#ff3b30;background:rgba(255,59,48,0.08);}
+
 /* ── Status badges ── */
 .jdui-badge{font-size:10px;font-weight:500;padding:2px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0;font-family:'Inter','Noto Sans SC',sans-serif;line-height:1.4;}
 

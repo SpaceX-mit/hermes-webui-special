@@ -813,6 +813,18 @@ function _renderJduiSessionList(){
     last.textContent=s.last_message||s.title||'';
     info.appendChild(last);
     el.appendChild(info);
+    // Delete button
+    const delBtn=document.createElement('button');
+    delBtn.className='jdui-session-del';
+    delBtn.title='删除对话';
+    delBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
+    delBtn.onclick=async(e)=>{
+      e.stopPropagation();
+      const ok=await showConfirmDialog({message:'确定删除这条对话？',confirmLabel:'删除',danger:true,focusCancel:true});
+      if(!ok)return;
+      await deleteSession(s.session_id);
+    };
+    el.appendChild(delBtn);
     el.onclick=()=>loadSession(s.session_id);
     list.appendChild(el);
   }
