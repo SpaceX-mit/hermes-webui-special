@@ -1091,6 +1091,15 @@ function _syncHermesPanelSessionActions(){
   setDisabled('btnClearConvModal',!hasSession||visibleMessages===0);
 }
 
+async function _triggerOnboardingRerun(){
+  try{
+    await api('/api/settings',{method:'POST',body:JSON.stringify({onboarding_completed:false})});
+    const btn=$('btnRerunOnboarding');
+    if(btn){btn.textContent='已设置，刷新页面即可进入引导';btn.style.color='#4EA100';btn.disabled=true;}
+    showToast('下次刷新页面将进入引导页');
+  }catch(e){showToast('设置失败: '+e.message);}
+}
+
 function toggleSettings(){
   const overlay=$('settingsOverlay');
   if(!overlay) return;
