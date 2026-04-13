@@ -314,7 +314,23 @@
 [data-theme="jdui"] .settings-field select:focus,[data-theme="jdui"] .settings-field input:focus{border-color:#b2e40d;}
 [data-theme="jdui"] .settings-action-btn{background:rgba(0,0,0,0.03);color:#1a1a1a;border-color:rgba(0,0,0,0.06);border-radius:12px;}
 [data-theme="jdui"] .settings-action-btn:hover{background:rgba(0,0,0,0.06);}
-[data-theme="jdui"] .settings-action-btn.danger{color:#ff0000;}
+[data-theme="jdui"] .settings-action-btn.danger{color:#ff3b30;}
+
+/* ── Confirm dialog JDUI overrides ── */
+[data-theme="jdui"] .app-dialog-overlay{background:rgba(0,0,0,0.35);backdrop-filter:blur(8px);}
+[data-theme="jdui"] .app-dialog{background:#fff;border:1px solid rgba(0,0,0,0.06);color:#1a1a1a;box-shadow:0 20px 60px rgba(0,0,0,0.12);}
+[data-theme="jdui"] .app-dialog-title{color:#1a1a1a;}
+[data-theme="jdui"] .app-dialog-desc{color:rgba(60,60,67,0.6);}
+[data-theme="jdui"] .app-dialog-close{background:rgba(0,0,0,0.04);color:rgba(60,60,67,0.4);}
+[data-theme="jdui"] .app-dialog-close:hover{background:rgba(0,0,0,0.08);color:#1a1a1a;}
+[data-theme="jdui"] .app-dialog-btn{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.08);color:#1a1a1a;}
+[data-theme="jdui"] .app-dialog-btn:hover{background:rgba(0,0,0,0.06);}
+[data-theme="jdui"] .app-dialog-btn.confirm{background:rgba(178,228,13,0.1);border-color:rgba(178,228,13,0.3);color:#558b2f;}
+[data-theme="jdui"] .app-dialog-btn.confirm:hover{background:rgba(178,228,13,0.18);}
+[data-theme="jdui"] .app-dialog-btn.confirm.danger{background:rgba(255,59,48,0.06);border-color:rgba(255,59,48,0.2);color:#ff3b30;}
+[data-theme="jdui"] .app-dialog-btn.confirm.danger:hover{background:rgba(255,59,48,0.12);border-color:rgba(255,59,48,0.35);}
+[data-theme="jdui"] .app-dialog-input{background:#f9fafb;border-color:rgba(0,0,0,0.08);color:#1a1a1a;}
+[data-theme="jdui"] .app-dialog-input:focus{border-color:#b2e40d;box-shadow:0 0 0 3px rgba(178,228,13,0.1);}
 [data-theme="jdui"] .settings-pane{color:#1a1a1a;}
 
 /* ── Chat header (JDUI) ── */
@@ -338,9 +354,10 @@
 .jdui-emp-card-name{font-size:14px;font-weight:600;color:#1a1a1a;font-family:'Inter','Noto Sans SC',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .jdui-emp-card-desc{font-size:11px;color:rgba(60,60,67,0.5);font-family:'Inter','Noto Sans SC',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
 .jdui-emp-card-actions{display:flex;gap:4px;flex-shrink:0;}
-.jdui-emp-card-actions button{background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;color:rgba(60,60,67,0.4);transition:color .2s,background .2s;}
-.jdui-emp-card-actions button:hover{color:#1a1a1a;background:rgba(0,0,0,0.04);}
-.jdui-emp-card-actions button.danger:hover{color:#ff0000;background:rgba(255,0,0,0.04);}
+.jdui-emp-card-actions button{background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:rgba(60,60,67,0.35);transition:color .2s,background .2s;}
+.jdui-emp-card-actions button:hover{color:#1a1a1a;background:rgba(0,0,0,0.05);}
+.jdui-emp-card-actions button.danger{color:rgba(255,0,0,0.3);}
+.jdui-emp-card-actions button.danger:hover{color:#ff3b30;background:rgba(255,59,48,0.08);}
 
 /* ── Employee form overlay ── */
 .jdui-emp-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;display:flex;align-items:center;justify-content:center;}
