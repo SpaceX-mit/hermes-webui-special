@@ -665,6 +665,11 @@
       <div class="jdui-form-group"><label>职责描述</label><textarea class="jdui-input" id="empFormDesc" rows="3" placeholder="描述这位数字员工的工作职责..." style="resize:vertical"></textarea></div>
       <label style="font-size:13px;font-weight:500;color:var(--text);display:block;margin-top:8px">性格预设</label>
       <div class="jdui-personality-grid" id="empFormPersonalities"></div>
+      <label style="font-size:13px;font-weight:500;color:var(--text);display:block;margin-top:16px">人设特质</label>
+      <div class="jdui-traits" id="empFormTraits"></div>
+      <div class="jdui-trait-add"><input class="jdui-input" id="empFormNewTrait" placeholder="添加新特质..." onkeydown="if(event.key==='Enter')_empFormAddTrait()"><button class="jdui-btn-primary" style="padding:8px 16px" onclick="_empFormAddTrait()">+</button></div>
+      <label style="font-size:13px;font-weight:500;color:var(--text);display:block;margin-top:16px">能力配置</label>
+      <div class="jdui-capabilities" id="empFormCapabilities"></div>
     </div>
     <div class="jdui-emp-form-footer">
       <button class="jdui-btn-secondary" onclick="_closeEmployeeForm()">取消</button>

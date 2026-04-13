@@ -128,3 +128,24 @@ function _restoreActiveEmployee() {
   const saved = localStorage.getItem('jdui-active-employee');
   if (saved) EMPLOYEE.active = saved;
 }
+
+async function _activateEmployee(id) {
+  try {
+    const res = await fetch('/api/employee/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF': '1' },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      EMPLOYEE.active = id;
+      localStorage.setItem('jdui-active-employee', id);
+      // Update global profile state
+      if (data.active) S.activeProfile = data.active;
+      if (typeof syncTopbar === 'function') syncTopbar();
+      if (typeof renderSessionList === 'function') renderSessionList();
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}

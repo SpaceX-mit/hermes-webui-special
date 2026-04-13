@@ -1,6 +1,7 @@
 """
 Hermes Web UI -- Digital Employee CRUD.
 Stores employee data in STATE_DIR/employees.json.
+Syncs each employee with a Hermes Agent profile for config, SOUL.md, and toolsets.
 """
 import json
 import time
@@ -8,9 +9,18 @@ import uuid
 from pathlib import Path
 
 from api.config import STATE_DIR
+from api.profiles import (
+    create_profile_api,
+    delete_profile_api,
+    switch_profile,
+    _DEFAULT_HERMES_HOME,
+)
 
 
 _EMPLOYEES_FILE = STATE_DIR / 'employees.json'
+
+
+# ── Persistence (unchanged) ────────────────────────────────────────────────
 
 
 def _load_employees():
@@ -31,17 +41,132 @@ def list_employees():
     return _load_employees()
 
 
+# ── Profile helpers ────────────────────────────────────────────────────────
+
+
+def _get_profile_dir(profile_name):
+    """Return the Path to a profile's home directory."""
+    if profile_name == 'default':
+        return _DEFAULT_HERMES_HOME
+    return _DEFAULT_HERMES_HOME / 'profiles' / profile_name
+
+
+def _generate_soul_md(name, description, traits):
+    """Build SOUL.md content from employee metadata."""
+    lines = [f'# 角色设定\n\n你是 {name}，{description}']
+    lines.append('\n## 性格特质')
+    for t in (traits or []):
+        lines.append(f'- {t}')
+    lines.append('\n## 工作准则')
+    lines.append('- 保持专业、高效的工作态度')
+    lines.append('- 根据上下文灵活调整沟通风格')
+    return '\n'.join(lines) + '\n'
+
+
+def _write_soul_md(profile_name, content):
+    """Write SOUL.md into the profile directory."""
+    profile_dir = _get_profile_dir(profile_name)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / 'SOUL.md').write_text(content, encoding='utf-8')
+
+
+def _update_profile_toolsets(profile_name, capabilities):
+    """Update platform_toolsets.cli in the profile's config.yaml."""
+    profile_dir = _get_profile_dir(profile_name)
+    config_path = profile_dir / 'config.yaml'
+
+    # Build toolset list from capabilities
+    toolsets = ['skills']
+    caps = capabilities or {}
+    if caps.get('search'):
+        toolsets.append('web')
+    if caps.get('memory'):
+        toolsets.append('memory')
+    if caps.get('autoExec'):
+        toolsets.append('terminal')
+    if caps.get('knowledge'):
+        toolsets.append('file')
+
+    try:
+        import yaml as _yaml
+
+        cfg = {}
+        if config_path.exists():
+            try:
+                loaded = _yaml.safe_load(config_path.read_text())
+                if isinstance(loaded, dict):
+                    cfg = loaded
+            except Exception:
+                pass
+
+        if 'platform_toolsets' not in cfg or not isinstance(cfg.get('platform_toolsets'), dict):
+            cfg['platform_toolsets'] = {}
+        cfg['platform_toolsets']['cli'] = toolsets
+
+        config_path.write_text(
+            _yaml.dump(cfg, default_flow_style=False, allow_unicode=True)
+        )
+    except ImportError:
+        # yaml not available -- write a minimal config manually
+        # Read existing content and replace/append the toolsets block
+        toolset_lines = ['platform_toolsets:', '  cli:']
+        for t in toolsets:
+            toolset_lines.append(f'    - {t}')
+        toolset_block = '\n'.join(toolset_lines) + '\n'
+
+        if config_path.exists():
+            text = config_path.read_text()
+            # Strip existing platform_toolsets block if present
+            import re
+            text = re.sub(
+                r'platform_toolsets:.*?(?=\n\S|\Z)',
+                '',
+                text,
+                flags=re.DOTALL,
+            ).strip()
+            if text:
+                text += '\n\n'
+            text += toolset_block
+        else:
+            text = toolset_block
+
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(text, encoding='utf-8')
+
+
+# ── CRUD operations ───────────────────────────────────────────────────────
+
+
 def create_employee(body):
     data = _load_employees()
+    emp_id = uuid.uuid4().hex[:12]
+    profile_name = f'emp-{emp_id}'
+
+    name = body.get('name', 'Digital Employee')
+    description = body.get('description', '')
+    traits = body.get('traits', [])
+    capabilities = body.get('capabilities', {})
+
     emp = {
-        'id': uuid.uuid4().hex[:12],
-        'name': body.get('name', 'Digital Employee'),
+        'id': emp_id,
+        'name': name,
         'avatar_index': body.get('avatar_index', 0),
-        'description': body.get('description', ''),
-        'traits': body.get('traits', []),
-        'capabilities': body.get('capabilities', {}),
+        'description': description,
+        'traits': traits,
+        'capabilities': capabilities,
+        'profile_name': profile_name,
         'created_at': time.time(),
     }
+
+    # Create a real Hermes profile cloned from default
+    try:
+        create_profile_api(profile_name, clone_from='default', clone_config=True)
+        _write_soul_md(profile_name, _generate_soul_md(name, description, traits))
+        _update_profile_toolsets(profile_name, capabilities)
+    except Exception:
+        # Profile creation failed -- employee record is still usable
+        pass
+
     data['employees'].append(emp)
     _save_employees(data)
     return emp
@@ -51,19 +176,71 @@ def update_employee(emp_id, body):
     data = _load_employees()
     for emp in data['employees']:
         if emp['id'] == emp_id:
+            soul_changed = False
+            caps_changed = False
+
             for key in ('name', 'avatar_index', 'description', 'traits', 'capabilities'):
                 if key in body:
                     emp[key] = body[key]
+                    if key in ('name', 'description', 'traits'):
+                        soul_changed = True
+                    if key == 'capabilities':
+                        caps_changed = True
+
             _save_employees(data)
+
+            # Sync changes to the Hermes profile
+            profile_name = emp.get('profile_name')
+            if profile_name:
+                try:
+                    if soul_changed:
+                        _write_soul_md(
+                            profile_name,
+                            _generate_soul_md(
+                                emp['name'],
+                                emp.get('description', ''),
+                                emp.get('traits', []),
+                            ),
+                        )
+                    if caps_changed:
+                        _update_profile_toolsets(profile_name, emp.get('capabilities', {}))
+                except Exception:
+                    pass
+
             return emp
     return None
 
 
 def delete_employee(emp_id):
     data = _load_employees()
+    # Find the employee to get profile_name before removal
+    profile_name = None
+    for e in data['employees']:
+        if e['id'] == emp_id:
+            profile_name = e.get('profile_name')
+            break
+
     before = len(data['employees'])
     data['employees'] = [e for e in data['employees'] if e['id'] != emp_id]
     if len(data['employees']) < before:
         _save_employees(data)
+        # Clean up the Hermes profile
+        if profile_name:
+            try:
+                delete_profile_api(profile_name)
+            except Exception:
+                pass
         return True
     return False
+
+
+def activate_employee(emp_id):
+    """Switch the active Hermes profile to this employee's profile."""
+    data = _load_employees()
+    for emp in data['employees']:
+        if emp['id'] == emp_id:
+            profile_name = emp.get('profile_name')
+            if not profile_name:
+                return None
+            return switch_profile(profile_name)
+    return None

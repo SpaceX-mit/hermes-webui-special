@@ -1519,6 +1519,8 @@ async function _renderJduiTaskCardFromCrons(){
 // ── JDUI Employee Management Panel ────────────────────────────────────────
 let _empFormEditId = null;
 let _empFormAvatarIdx = 0;
+let _empFormTraits = [];
+let _empFormCapabilities = { search: true, memory: true, autoExec: false, knowledge: true };
 
 async function _loadEmployeePanel() {
   const box = $('employeesPanel');
@@ -1546,7 +1548,11 @@ async function _loadEmployeePanel() {
         <button title="编辑" onclick="event.stopPropagation();_openEditEmployeeForm('${emp.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
         <button class="danger" title="删除" onclick="event.stopPropagation();_confirmDeleteEmployee('${emp.id}','${(emp.name||'').replace(/'/g,"\\'")}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
       </div>`;
-    card.onclick = () => { _setActiveEmployee(emp.id); _loadEmployeePanel(); };
+    card.onclick = async () => {
+      const ok = await _activateEmployee(emp.id);
+      if (ok) showToast('已切换到 ' + (emp.name || '员工'));
+      await _loadEmployeePanel();
+    };
     list.appendChild(card);
   });
   box.appendChild(list);
@@ -1558,10 +1564,14 @@ function _openAddEmployeeForm() {
   $('empFormTitle').textContent = '添加数字员工';
   $('empFormName').value = '';
   $('empFormDesc').value = '';
+  _empFormTraits = ['专业高效', '善于沟通', '持续学习'];
+  _empFormCapabilities = { search: true, memory: true, autoExec: false, knowledge: true };
   $('empFormId').value = '';
   $('empFormSubmit').textContent = '保存';
   _renderEmpFormAvatars();
   _renderEmpFormPersonalities();
+  _renderEmpFormTraits();
+  _renderEmpFormCapabilities();
   $('empFormOverlay').style.display = 'flex';
 }
 
@@ -1573,10 +1583,14 @@ function _openEditEmployeeForm(id) {
   $('empFormTitle').textContent = '编辑数字员工';
   $('empFormName').value = emp.name || '';
   $('empFormDesc').value = emp.description || '';
+  _empFormTraits = emp.traits || ['专业高效', '善于沟通', '持续学习'];
+  _empFormCapabilities = emp.capabilities || { search: true, memory: true, autoExec: false, knowledge: true };
   $('empFormId').value = id;
   $('empFormSubmit').textContent = '更新';
   _renderEmpFormAvatars();
   _renderEmpFormPersonalities();
+  _renderEmpFormTraits();
+  _renderEmpFormCapabilities();
   $('empFormOverlay').style.display = 'flex';
 }
 
@@ -1614,7 +1628,9 @@ async function _submitEmployeeForm() {
   const name = ($('empFormName').value || '').trim();
   if (!name) { showToast('请输入员工名称'); return; }
   const desc = ($('empFormDesc').value || '').trim();
-  const data = { name, avatar_index: _empFormAvatarIdx, description: desc };
+  const traits = _empFormTraits || [];
+  const caps = _empFormCapabilities || {};
+  const data = { name, avatar_index: _empFormAvatarIdx, description: desc, traits, capabilities: caps };
   if (_empFormEditId) {
     data.id = _empFormEditId;
     const result = await _updateEmployee(data);
@@ -1633,6 +1649,40 @@ async function _confirmDeleteEmployee(id, name) {
   await _deleteEmployeeById(id);
   showToast('员工已删除');
   await _loadEmployeePanel();
+}
+
+function _renderEmpFormTraits() {
+  const container = $('empFormTraits');
+  if (!container) return;
+  container.innerHTML = '';
+  _empFormTraits.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'jdui-trait';
+    el.innerHTML = '<div class="dot"></div><span>' + (typeof esc === 'function' ? esc(t) : t) + '</span><button onclick="_empFormTraits.splice(' + i + ',1);_renderEmpFormTraits()">×</button>';
+    container.appendChild(el);
+  });
+}
+
+function _empFormAddTrait() {
+  const input = $('empFormNewTrait');
+  if (!input || !input.value.trim()) return;
+  _empFormTraits.push(input.value.trim());
+  input.value = '';
+  _renderEmpFormTraits();
+}
+
+function _renderEmpFormCapabilities() {
+  const container = $('empFormCapabilities');
+  if (!container) return;
+  container.innerHTML = '';
+  const caps = typeof EMPLOYEE !== 'undefined' ? EMPLOYEE.defaultCapabilities : [];
+  caps.forEach(c => {
+    const enabled = _empFormCapabilities[c.id] !== false;
+    const el = document.createElement('div');
+    el.className = 'jdui-capability';
+    el.innerHTML = '<div class="jdui-capability-info"><div class="jdui-capability-icon" style="background:' + c.color + '20"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="' + c.color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg></div><span class="jdui-capability-name">' + c.name + '</span></div><label class="jdui-toggle"><input type="checkbox" ' + (enabled ? 'checked' : '') + ' onchange="_empFormCapabilities[\'' + c.id + '\']=this.checked"><span class="jdui-toggle-slider"></span></label>';
+    container.appendChild(el);
+  });
 }
 
 // Event wiring

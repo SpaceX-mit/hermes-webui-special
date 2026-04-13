@@ -797,6 +797,19 @@ def handle_post(handler, parsed) -> bool:
         deleted = delete_employee(emp_id)
         return j(handler, {"ok": True, "deleted": deleted})
 
+    if parsed.path == "/api/employee/activate":
+        from api.employees import activate_employee
+        emp_id = body.get("id", "").strip()
+        if not emp_id:
+            return bad(handler, "id is required")
+        try:
+            result = activate_employee(emp_id)
+            if result is None:
+                return j(handler, {"error": "employee or profile not found"}, status=404)
+            return j(handler, {"ok": True, "active": result.get("active", "")})
+        except (ValueError, RuntimeError) as exc:
+            return j(handler, {"error": str(exc)}, status=409)
+
     if parsed.path == "/api/profile/create":
         name = body.get("name", "").strip()
         if not name:
