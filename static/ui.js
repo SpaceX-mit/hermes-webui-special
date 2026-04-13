@@ -1520,9 +1520,15 @@ function _syncJduiTopbar(){
   const existingSidebarHdr=document.querySelector('.jdui-sidebar-header');
   if(existingSidebarHdr)existingSidebarHdr.remove();
   if(!S.session)return;
-  // Use employee name if available, fallback to bot name, never use session title
+  // Use employee name if available, fallback to bot name
   const activeEmp=typeof _getActiveEmployee==='function'&&_getActiveEmployee();
   const empName=activeEmp?activeEmp.name:(window._botName||'数字员工');
+  const empDesc=activeEmp&&activeEmp.description?activeEmp.description.slice(0,30)+(activeEmp.description.length>30?'...':''):'全能型数字员工，随时为您提供帮助';
+  // Determine status from session state
+  const isBusy=S.busy||S.activeStreamId;
+  const statusText=isBusy?'任务进行中':(S.messages&&S.messages.length>0?'在线':'空闲');
+  const statusBg=isBusy?'#206cff':(S.messages&&S.messages.length>0?'#4EA100':'rgba(143,143,154,0.15)');
+  const statusColor=isBusy||S.messages&&S.messages.length>0?'#fff':'rgba(60,60,67,0.5)';
 
   // ── Employee info + action buttons in the chat topbar ──
   const div=document.createElement('div');
@@ -1531,9 +1537,9 @@ function _syncJduiTopbar(){
     <div class="jdui-topbar-left">
       <div class="jdui-topbar-name-row">
         <span class="jdui-topbar-name">${esc(empName)}</span>
-        <span class="jdui-badge" style="color:#fff;background:#206cff;font-size:10px;padding:2px 8px">任务进行中</span>
+        <span class="jdui-badge" style="color:${statusColor};background:${statusBg};font-size:10px;padding:2px 8px">${statusText}</span>
       </div>
-      <span class="jdui-topbar-desc">全能型数字员工，随时为您提供帮助</span>
+      <span class="jdui-topbar-desc">${esc(empDesc)}</span>
     </div>
     <div class="jdui-topbar-actions">
       <button title="搜索" onclick="$('sessionSearch').focus()">
