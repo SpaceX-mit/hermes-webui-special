@@ -140,8 +140,9 @@ async function _activateEmployee(id) {
       const data = await res.json();
       EMPLOYEE.active = id;
       localStorage.setItem('jdui-active-employee', id);
-      // Update global profile state
       if (data.active) S.activeProfile = data.active;
+      // Start a fresh session for this employee
+      if (typeof newSession === 'function') await newSession(true);
       if (typeof syncTopbar === 'function') syncTopbar();
       if (typeof renderSessionList === 'function') renderSessionList();
       return true;
