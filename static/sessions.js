@@ -762,22 +762,28 @@ function _renderJduiSessionList(){
   closeSessionActionMenu();
   const q=($('sessionSearch').value||'').toLowerCase();
   const filtered=q?_allSessions.filter(s=>(s.title||'Untitled').toLowerCase().includes(q)):_allSessions;
-  const profileFiltered=_showAllProfiles?filtered:filtered.filter(s=>s.is_cli_session||s.profile===S.activeProfile);
-  const sessions=_showArchived?profileFiltered:profileFiltered.filter(s=>!s.archived);
+  // Show all profiles' sessions so user can see all employees' conversations
+  const sessions=(_showArchived?filtered:filtered.filter(s=>!s.archived));
   const list=$('sessionList');list.innerHTML='';
   const avatars=typeof EMPLOYEE!=='undefined'?EMPLOYEE.avatars:[];
+  const employees=typeof EMPLOYEE!=='undefined'?EMPLOYEE.employees:[];
   const botName=window._botName||'Hermes';
   for(let i=0;i<sessions.length;i++){
     const s=sessions[i];
     const isActive=S.session&&s.session_id===S.session.session_id;
+    // Match session to employee via profile name
+    const sessionProfile=s.profile||'default';
+    const matchedEmp=employees.find(e=>e.profile_name===sessionProfile)||null;
+    const empName=matchedEmp?matchedEmp.name:botName;
+    const empAvatarIdx=matchedEmp?matchedEmp.avatar_index:0;
+    const empAvatar=avatars[empAvatarIdx]||avatars[0]||'/static/avatars/avatar0.png';
     const el=document.createElement('div');
     el.className='session-item'+(isActive?' active':'');
     el.style.cssText='display:flex;gap:12px;align-items:center;padding:12px;border-radius:16px;cursor:pointer;';
     // Avatar
     const avatar=document.createElement('img');
     avatar.className='jdui-session-avatar';
-    const empData=s._employee||{};
-    avatar.src=empData.avatar||avatars[i%avatars.length]||'/static/avatars/avatar0.png';
+    avatar.src=empAvatar;
     avatar.alt='';
     el.appendChild(avatar);
     // Info column
@@ -790,9 +796,11 @@ function _renderJduiSessionList(){
     nameRow.style.cssText='display:flex;align-items:center;gap:6px;min-width:0;';
     const name=document.createElement('span');
     name.className='jdui-session-name';
-    name.textContent=empData.name||botName;
+    name.textContent=empName;
     nameRow.appendChild(name);
-    const statusKey=isActive?'task':(s.pinned?'online':'idle');
+    // Status: active session → task, matched employee active → online, else idle
+    const isEmpActive=matchedEmp&&EMPLOYEE.active===matchedEmp.id;
+    const statusKey=isActive?'task':(isEmpActive?'online':'idle');
     const badge=_employeeStatusBadge(statusKey);
     const badgeEl=document.createElement('span');
     badgeEl.className='jdui-badge';
