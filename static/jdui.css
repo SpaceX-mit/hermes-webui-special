@@ -329,6 +329,27 @@
 .jdui-topbar-actions button.active{opacity:1;}
 .jdui-topbar-actions button.active svg{color:#206cff;}
 
+/* ── Employee management panel ── */
+.jdui-emp-card{background:#fff;border-radius:14px;padding:12px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:box-shadow .2s,background .2s;border:2px solid transparent;}
+.jdui-emp-card:hover{box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+.jdui-emp-card.active{border-color:#b2e40d;background:rgba(178,228,13,0.04);}
+.jdui-emp-card-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.jdui-emp-card-info{flex:1;min-width:0;}
+.jdui-emp-card-name{font-size:14px;font-weight:600;color:#1a1a1a;font-family:'Inter','Noto Sans SC',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.jdui-emp-card-desc{font-size:11px;color:rgba(60,60,67,0.5);font-family:'Inter','Noto Sans SC',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.jdui-emp-card-actions{display:flex;gap:4px;flex-shrink:0;}
+.jdui-emp-card-actions button{background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;color:rgba(60,60,67,0.4);transition:color .2s,background .2s;}
+.jdui-emp-card-actions button:hover{color:#1a1a1a;background:rgba(0,0,0,0.04);}
+.jdui-emp-card-actions button.danger:hover{color:#ff0000;background:rgba(255,0,0,0.04);}
+
+/* ── Employee form overlay ── */
+.jdui-emp-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;display:flex;align-items:center;justify-content:center;}
+.jdui-emp-form{background:#fff;border-radius:20px;width:480px;max-width:90vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15);}
+.jdui-emp-form-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px 12px;flex-shrink:0;}
+.jdui-emp-form-header h3{font-size:18px;font-weight:700;color:#1a1a1a;margin:0;font-family:'Inter','Noto Sans SC',sans-serif;}
+.jdui-emp-form-body{flex:1;overflow-y:auto;padding:0 24px 16px;}
+.jdui-emp-form-footer{display:flex;gap:12px;justify-content:flex-end;padding:16px 24px;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;}
+
 /* ── Mobile ── */
 @media(max-width:900px){
   .jdui-nav{display:none!important;}

@@ -84,3 +84,47 @@ function _employeeStatusBadge(status) {
   };
   return map[status] || map.online;
 }
+
+async function _updateEmployee(emp) {
+  try {
+    const res = await fetch('/api/employee/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF': '1' },
+      body: JSON.stringify(emp),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const idx = EMPLOYEE.employees.findIndex(e => e.id === emp.id);
+      if (idx >= 0) EMPLOYEE.employees[idx] = data.employee || emp;
+      return data.employee || emp;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+async function _deleteEmployeeById(id) {
+  try {
+    const res = await fetch('/api/employee/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF': '1' },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) {
+      EMPLOYEE.employees = EMPLOYEE.employees.filter(e => e.id !== id);
+      if (EMPLOYEE.active === id) EMPLOYEE.active = null;
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+function _setActiveEmployee(id) {
+  EMPLOYEE.active = id;
+  localStorage.setItem('jdui-active-employee', id || '');
+  if (typeof syncTopbar === 'function') syncTopbar();
+}
+
+function _restoreActiveEmployee() {
+  const saved = localStorage.getItem('jdui-active-employee');
+  if (saved) EMPLOYEE.active = saved;
+}

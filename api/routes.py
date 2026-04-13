@@ -779,6 +779,24 @@ def handle_post(handler, parsed) -> bool:
         emp = create_employee(body)
         return j(handler, {"ok": True, "employee": emp})
 
+    if parsed.path == "/api/employee/update":
+        from api.employees import update_employee
+        emp_id = body.get("id", "").strip()
+        if not emp_id:
+            return bad(handler, "id is required")
+        emp = update_employee(emp_id, body)
+        if emp is None:
+            return j(handler, {"error": "employee not found"}, status=404)
+        return j(handler, {"ok": True, "employee": emp})
+
+    if parsed.path == "/api/employee/delete":
+        from api.employees import delete_employee
+        emp_id = body.get("id", "").strip()
+        if not emp_id:
+            return bad(handler, "id is required")
+        deleted = delete_employee(emp_id)
+        return j(handler, {"ok": True, "deleted": deleted})
+
     if parsed.path == "/api/profile/create":
         name = body.get("name", "").strip()
         if not name:

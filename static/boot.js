@@ -521,6 +521,8 @@ function _jduiNavActivate(btn){
   await loadWorkspaceList();
   await loadOnboardingWizard();
   _applyJduiLayout();
+  if(typeof _restoreActiveEmployee==='function') _restoreActiveEmployee();
+  if(typeof _loadEmployees==='function') await _loadEmployees();
   _initResizePanels();
   // Restore workspace panel open/closed state from last visit
   if(localStorage.getItem('hermes-webui-workspace-panel')==='open'){

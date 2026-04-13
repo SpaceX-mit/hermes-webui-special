@@ -45,3 +45,25 @@ def create_employee(body):
     data['employees'].append(emp)
     _save_employees(data)
     return emp
+
+
+def update_employee(emp_id, body):
+    data = _load_employees()
+    for emp in data['employees']:
+        if emp['id'] == emp_id:
+            for key in ('name', 'avatar_index', 'description', 'traits', 'capabilities'):
+                if key in body:
+                    emp[key] = body[key]
+            _save_employees(data)
+            return emp
+    return None
+
+
+def delete_employee(emp_id):
+    data = _load_employees()
+    before = len(data['employees'])
+    data['employees'] = [e for e in data['employees'] if e['id'] != emp_id]
+    if len(data['employees']) < before:
+        _save_employees(data)
+        return True
+    return False

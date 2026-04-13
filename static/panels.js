@@ -16,6 +16,7 @@ async function switchPanel(name) {
   if (name === 'workspaces') await loadWorkspacesPanel();
   if (name === 'profiles') await loadProfilesPanel();
   if (name === 'todos') loadTodos();
+  if (name === 'employees') await _loadEmployeePanel();
 }
 
 // ── Cron panel ──
@@ -1513,6 +1514,125 @@ async function _renderJduiTaskCardFromCrons(){
   }catch(e){
     list.innerHTML='<div style="font-size:13px;color:rgba(60,60,67,0.5)">加载失败</div>';
   }
+}
+
+// ── JDUI Employee Management Panel ────────────────────────────────────────
+let _empFormEditId = null;
+let _empFormAvatarIdx = 0;
+
+async function _loadEmployeePanel() {
+  const box = $('employeesPanel');
+  if (!box) return;
+  await _loadEmployees();
+  box.innerHTML = '';
+  if (!EMPLOYEE.employees.length) {
+    box.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:12px;text-align:center">暂无数字员工，点击上方按钮添加</div>';
+    return;
+  }
+  const list = document.createElement('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+  EMPLOYEE.employees.forEach(emp => {
+    const card = document.createElement('div');
+    const isActive = EMPLOYEE.active === emp.id;
+    card.className = 'jdui-emp-card' + (isActive ? ' active' : '');
+    const avSrc = _getEmployeeAvatar(emp.avatar_index);
+    card.innerHTML = `
+      <img class="jdui-emp-card-avatar" src="${avSrc}" alt="">
+      <div class="jdui-emp-card-info">
+        <div class="jdui-emp-card-name">${emp.name || '未命名'}</div>
+        <div class="jdui-emp-card-desc">${emp.description ? emp.description.slice(0, 40) + (emp.description.length > 40 ? '...' : '') : '无描述'}</div>
+      </div>
+      <div class="jdui-emp-card-actions">
+        <button title="编辑" onclick="event.stopPropagation();_openEditEmployeeForm('${emp.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+        <button class="danger" title="删除" onclick="event.stopPropagation();_confirmDeleteEmployee('${emp.id}','${(emp.name||'').replace(/'/g,"\\'")}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+      </div>`;
+    card.onclick = () => { _setActiveEmployee(emp.id); _loadEmployeePanel(); };
+    list.appendChild(card);
+  });
+  box.appendChild(list);
+}
+
+function _openAddEmployeeForm() {
+  _empFormEditId = null;
+  _empFormAvatarIdx = 0;
+  $('empFormTitle').textContent = '添加数字员工';
+  $('empFormName').value = '';
+  $('empFormDesc').value = '';
+  $('empFormId').value = '';
+  $('empFormSubmit').textContent = '保存';
+  _renderEmpFormAvatars();
+  _renderEmpFormPersonalities();
+  $('empFormOverlay').style.display = 'flex';
+}
+
+function _openEditEmployeeForm(id) {
+  const emp = EMPLOYEE.employees.find(e => e.id === id);
+  if (!emp) return;
+  _empFormEditId = id;
+  _empFormAvatarIdx = emp.avatar_index || 0;
+  $('empFormTitle').textContent = '编辑数字员工';
+  $('empFormName').value = emp.name || '';
+  $('empFormDesc').value = emp.description || '';
+  $('empFormId').value = id;
+  $('empFormSubmit').textContent = '更新';
+  _renderEmpFormAvatars();
+  _renderEmpFormPersonalities();
+  $('empFormOverlay').style.display = 'flex';
+}
+
+function _closeEmployeeForm() {
+  $('empFormOverlay').style.display = 'none';
+}
+
+function _renderEmpFormAvatars() {
+  const container = $('empFormAvatars');
+  if (!container) return;
+  container.innerHTML = '';
+  EMPLOYEE.avatars.forEach((src, i) => {
+    const img = document.createElement('img');
+    img.className = 'jdui-avatar-option' + (i === _empFormAvatarIdx ? ' selected' : (Math.abs(i - _empFormAvatarIdx) === 1 ? ' near' : ''));
+    img.src = src; img.alt = 'Avatar ' + (i + 1);
+    img.onclick = () => { _empFormAvatarIdx = i; _renderEmpFormAvatars(); };
+    container.appendChild(img);
+  });
+}
+
+function _renderEmpFormPersonalities() {
+  const grid = $('empFormPersonalities');
+  if (!grid) return;
+  grid.innerHTML = '';
+  EMPLOYEE.personalities.slice(0, 6).forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'jdui-personality-card';
+    card.innerHTML = `<h5>${p.name}</h5><p>${p.desc.slice(0, 40)}...</p>`;
+    card.onclick = () => { $('empFormDesc').value = p.desc; };
+    grid.appendChild(card);
+  });
+}
+
+async function _submitEmployeeForm() {
+  const name = ($('empFormName').value || '').trim();
+  if (!name) { showToast('请输入员工名称'); return; }
+  const desc = ($('empFormDesc').value || '').trim();
+  const data = { name, avatar_index: _empFormAvatarIdx, description: desc };
+  if (_empFormEditId) {
+    data.id = _empFormEditId;
+    const result = await _updateEmployee(data);
+    if (result) showToast('员工已更新');
+  } else {
+    const result = await _saveEmployee(data);
+    if (result) showToast('员工已添加');
+  }
+  _closeEmployeeForm();
+  await _loadEmployeePanel();
+}
+
+async function _confirmDeleteEmployee(id, name) {
+  const ok = await showConfirmDialog({ message: '确定删除员工 "' + name + '"？', confirmLabel: '删除', danger: true });
+  if (!ok) return;
+  await _deleteEmployeeById(id);
+  showToast('员工已删除');
+  await _loadEmployeePanel();
 }
 
 // Event wiring

@@ -39,6 +39,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         <span>任务</span>
       </button>
+      <button class="jdui-nav-item" data-panel="employees" onclick="switchPanel('employees');_jduiNavActivate(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>员工</span>
+      </button>
     </div>
     <div class="jdui-nav-bottom" onclick="toggleSettings()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -164,6 +168,14 @@
         <div id="profileFormError" style="font-size:11px;color:var(--accent);margin-top:6px;display:none"></div>
       </div>
       <div style="flex:1;overflow-y:auto;padding:0 12px 12px" id="profilesPanel"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+    </div>
+    <!-- Employee management panel (JDUI) -->
+    <div class="panel-view" id="panelEmployees">
+      <div class="sidebar-section" style="padding-bottom:4px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:11px;color:var(--muted)">数字员工</div>
+        <button class="cron-btn run" style="padding:3px 8px;font-size:10px" onclick="_openAddEmployeeForm()">+ 添加员工</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:0 12px 12px" id="employeesPanel"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
     </div>
     <div class="sidebar-bottom">
       <button class="hermes-launch-btn" id="btnHermesPanel" onclick="toggleSettings()" title="Open Hermes control center">
@@ -640,6 +652,27 @@
 <script src="/static/sessions.js"></script>
 <script src="/static/commands.js"></script>
 <script src="/static/messages.js"></script>
+<!-- Employee add/edit form overlay (JDUI) -->
+<div class="jdui-emp-overlay" id="empFormOverlay" style="display:none" onclick="if(event.target===this)_closeEmployeeForm()">
+  <div class="jdui-emp-form" id="empForm">
+    <div class="jdui-emp-form-header">
+      <h3 id="empFormTitle">添加数字员工</h3>
+      <button class="panel-icon-btn" onclick="_closeEmployeeForm()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="jdui-emp-form-body">
+      <div class="jdui-avatar-carousel" id="empFormAvatars"></div>
+      <div class="jdui-form-group"><label>员工名称</label><input class="jdui-input" id="empFormName" placeholder="输入员工名称"></div>
+      <div class="jdui-form-group"><label>职责描述</label><textarea class="jdui-input" id="empFormDesc" rows="3" placeholder="描述这位数字员工的工作职责..." style="resize:vertical"></textarea></div>
+      <label style="font-size:13px;font-weight:500;color:var(--text);display:block;margin-top:8px">性格预设</label>
+      <div class="jdui-personality-grid" id="empFormPersonalities"></div>
+    </div>
+    <div class="jdui-emp-form-footer">
+      <button class="jdui-btn-secondary" onclick="_closeEmployeeForm()">取消</button>
+      <button class="jdui-btn-primary" id="empFormSubmit" onclick="_submitEmployeeForm()">保存</button>
+    </div>
+    <input type="hidden" id="empFormId" value="">
+  </div>
+</div>
 <script src="/static/panels.js"></script>
 <script src="/static/employee.js"></script>
 <script src="/static/onboarding.js"></script>
