@@ -825,7 +825,25 @@ function _renderJduiSessionList(){
       await deleteSession(s.session_id);
     };
     el.appendChild(delBtn);
-    el.onclick=()=>loadSession(s.session_id);
+    el.onclick=async()=>{
+      // If this session belongs to a different employee, switch profile first
+      const sessionProfile=s.profile||'default';
+      if(sessionProfile!==S.activeProfile){
+        // Find the employee that owns this profile and activate it
+        if(typeof EMPLOYEE!=='undefined'&&EMPLOYEE.employees.length){
+          const emp=EMPLOYEE.employees.find(e=>e.profile_name===sessionProfile);
+          if(emp){
+            EMPLOYEE.active=emp.id;
+            localStorage.setItem('jdui-active-employee',emp.id);
+            try{
+              await fetch('/api/employee/activate',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':'1'},body:JSON.stringify({id:emp.id})});
+              S.activeProfile=sessionProfile;
+            }catch(e){}
+          }
+        }
+      }
+      await loadSession(s.session_id);
+    };
     list.appendChild(el);
   }
 }
