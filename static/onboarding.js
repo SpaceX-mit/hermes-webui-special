@@ -265,6 +265,10 @@ async function loadOnboardingWizard(){
     ONBOARDING.form.baseUrl=current.base_url||'';
     ONBOARDING.active=!status.completed;
     if(!ONBOARDING.active) return false;
+    // JDUI theme: use digital employee wizard
+    if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
+      return _loadJduiWizard();
+    }
     $('onboardingOverlay').style.display='flex';
     _renderOnboardingSteps();
     _renderOnboardingBody();
@@ -358,4 +362,164 @@ async function nextOnboardingStep(){
   }catch(e){
     _setOnboardingNotice(e.message||String(e),'warn');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// JDUI Digital Employee Onboarding Wizard
+// ═══════════════════════════════════════════════════════════════════════════
+
+const JDUI_WIZ={step:'env',employeeName:'1 号员工',avatarIndex:0,description:'',traits:['专业高效','善于沟通','持续学习'],capabilities:{search:true,memory:true,autoExec:false,knowledge:true},selectedProvider:'spacemit',apiProvider:'openai',apiModel:'gpt-4o',apiBaseUrl:'',apiKey:''};
+
+function _loadJduiWizard(){
+  const overlay=$('onboardingOverlay');
+  overlay.style.display='flex';
+  overlay.style.background='#232323';
+  overlay.innerHTML='';
+  const shell=document.createElement('div');
+  shell.className='jdui-wizard';
+  shell.id='jduiWizardShell';
+  overlay.appendChild(shell);
+  _renderJduiWizard();
+  return true;
+}
+
+function _jduiStepNum(){
+  const m={env:1,model:2,apikey:2,employee:3,confirm:3,loading:3};
+  return m[JDUI_WIZ.step]||1;
+}
+
+function _renderJduiWizard(){
+  const shell=$('jduiWizardShell');
+  if(!shell)return;
+  const step=_jduiStepNum();
+  shell.innerHTML=`
+    <div class="jdui-wizard-sidebar" id="jduiWizSidebar">
+      <div class="jdui-wizard-logo">
+        <svg width="40" height="50" viewBox="0 0 27 34" fill="none"><path d="M10.8425 33.4418L1.01193 28.5266C0.707839 28.3746 0.452095 28.1409 0.273362 27.8517C0.0946292 27.5625 -2.85304e-05 27.2293 6.45042e-09 26.8893V17.4904C0.000109948 17.1784 0.0799397 16.8716 0.231914 16.5992C0.383888 16.3267 0.602964 16.0976 0.868355 15.9336C1.13374 15.7696 1.43664 15.6761 1.74831 15.662C2.05998 15.6479 2.37007 15.7137 2.64916 15.8532L12.4797 20.7685C12.7838 20.9204 13.0395 21.1541 13.2183 21.4433C13.397 21.7325 13.4917 22.0657 13.4916 22.4057V31.8046C13.4917 32.1167 13.412 32.4235 13.2601 32.6961C13.1082 32.9687 12.8891 33.1979 12.6236 33.362C12.3582 33.526 12.0552 33.6195 11.7434 33.6335C11.4317 33.6474 11.1215 33.5815 10.8425 33.4418Z" fill="#B0E237"/><path d="M17.5272 14.3061L25.1552 10.4907C25.4593 10.3387 25.7151 10.105 25.8938 9.81582C26.0725 9.52664 26.1672 9.1934 26.1672 8.85344V1.61917C26.1663 1.34303 26.095 1.07168 25.9601 0.830739C25.8252 0.589802 25.6311 0.387236 25.3961 0.242177C25.1611 0.0971179 24.8931 0.0143547 24.6172 0.00170538C24.3414 -0.0109439 24.0668 0.0469383 23.8196 0.169884L16.1887 3.98176C15.8846 4.13375 15.6289 4.36743 15.4501 4.65661C15.2714 4.94579 15.1767 5.27904 15.1768 5.61899V12.8533C15.1768 13.1301 15.2476 13.4023 15.3824 13.6441C15.5172 13.8859 15.7116 14.0892 15.9471 14.2348C16.1825 14.3803 16.4513 14.4633 16.7279 14.4758C17.0044 14.4883 17.2796 14.4299 17.5272 14.3061Z" fill="#C0E767"/><path d="M17.1656 23.5561L21.2962 21.4908C21.6003 21.3388 21.856 21.1051 22.0348 20.8159C22.2135 20.5267 22.3082 20.1935 22.3081 19.8535V16.0774C22.3081 15.8431 22.2482 15.6128 22.1342 15.4082C22.0201 15.2036 21.8556 15.0315 21.6564 14.9084C21.4571 14.7852 21.2297 14.715 20.9956 14.7045C20.7616 14.694 20.5288 14.7434 20.3193 14.8482L16.1887 16.9135C15.8846 17.0655 15.6289 17.2992 15.4501 17.5884C15.2714 17.8775 15.1767 18.2108 15.1768 18.5507V22.3247C15.1764 22.5592 15.236 22.7898 15.3499 22.9947C15.4638 23.1996 15.6283 23.3719 15.8276 23.4953C16.0269 23.6187 16.2545 23.6891 16.4887 23.6997C16.7229 23.7104 16.9559 23.6609 17.1656 23.5561Z" fill="#D0EE90"/></svg>
+      </div>
+      <div class="jdui-wizard-welcome">
+        <h2>欢迎使用<br><span class="accent">Openclaw</span><br>数字员工</h2>
+        <p class="subtitle">三步完成初始化，让你的数字员工开始工作</p>
+        <div class="jdui-wizard-steps">
+          <span class="${step===1?'active':'inactive'}">01&nbsp;&nbsp;环境检测</span>
+          <span class="${step===2?'active':'inactive'}">02&nbsp;&nbsp;核心引擎</span>
+          <span class="${step===3?'active':'inactive'}">03&nbsp;&nbsp;创建员工</span>
+        </div>
+      </div>
+      <div class="jdui-wizard-footer"><span>V0.1.0 STABLE</span></div>
+    </div>
+    <div class="jdui-wizard-content">
+      <div class="jdui-wizard-body" id="jduiWizBody"></div>
+    </div>`;
+  _renderJduiStepBody();
+}
+
+function _renderJduiStepBody(){
+  const body=$('jduiWizBody');
+  if(!body)return;
+  const fn={env:_renderJduiEnvCheck,model:_renderJduiModelSelect,apikey:_renderJduiApiKey,employee:_renderJduiCreateEmployee,confirm:_renderJduiConfirm,loading:_renderJduiLoading};
+  (fn[JDUI_WIZ.step]||fn.env)(body);
+}
+
+function _jduiGoStep(step){
+  JDUI_WIZ.step=step;
+  _renderJduiWizard();
+}
+
+function _renderJduiEnvCheck(body){
+  const checks=[
+    {name:'设备硬件',desc:'检测处理器和内存配置',icon:'💻',color:'#206CFF',bg:'rgba(32,108,255,0.1)'},
+    {name:'本地服务',desc:'检测必要的系统服务状态',icon:'⚙️',color:'#FF7024',bg:'rgba(255,112,36,0.1)'},
+    {name:'网络连接',desc:'检测网络连通性和延迟',icon:'🌐',color:'#7434DC',bg:'rgba(116,52,220,0.1)'},
+    {name:'存储空间',desc:'检测可用磁盘空间',icon:'💾',color:'#4EA100',bg:'rgba(78,161,0,0.1)'},
+    {name:'系统权限',desc:'检测必要的系统权限',icon:'🔒',color:'#FF0000',bg:'rgba(255,0,0,0.1)'},
+  ];
+  body.innerHTML=`<div class="jdui-step"><div style="display:flex;align-items:center;justify-content:space-between"><h3>环境检测</h3><span class="jdui-badge" style="color:#fff;background:#206cff" id="jduiEnvBadge">检测中</span></div><p class="step-desc">正在检测您的系统环境，确保一切就绪</p><div class="jdui-env-list" id="jduiEnvList"></div><div class="jdui-step-actions"><button class="jdui-btn-primary" id="jduiEnvNext" disabled onclick="_jduiGoStep('model')">下一步</button></div></div>`;
+  const list=$('jduiEnvList');
+  checks.forEach((c,i)=>{
+    const card=document.createElement('div');card.className='jdui-env-card';
+    card.innerHTML=`<div class="jdui-env-icon" style="background:${c.bg}"><span style="font-size:20px">${c.icon}</span></div><div class="jdui-env-info"><strong>${c.name}</strong><span>${c.desc}</span></div><div class="jdui-env-status checking" id="jduiEnvStatus${i}"></div>`;
+    list.appendChild(card);
+  });
+  let done=0;
+  checks.forEach((c,i)=>{
+    setTimeout(()=>{
+      const el=$('jduiEnvStatus'+i);if(!el)return;
+      const pass=i!==4;
+      el.className='jdui-env-status '+(pass?'pass':'fail');
+      el.innerHTML=pass?'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      done++;
+      if(done===checks.length){
+        const badge=$('jduiEnvBadge');if(badge){badge.textContent='检测完成';badge.style.background='#4EA100';}
+        const btn=$('jduiEnvNext');if(btn)btn.disabled=false;
+      }
+    },600+i*500);
+  });
+}
+
+function _renderJduiModelSelect(body){
+  body.innerHTML=`<div class="jdui-step"><h3>选择核心引擎</h3><p class="step-desc">选择驱动数字员工的 AI 引擎</p><div class="jdui-model-cards"><div class="jdui-model-card${JDUI_WIZ.selectedProvider==='spacemit'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='spacemit';_renderJduiModelSelect($('jduiWizBody'))"><div class="jdui-model-badge" style="background:rgba(178,228,13,0.15);color:#558b2f">推荐方案</div><h4>Spacemit Engine</h4><p>预配置的高性能引擎，支持 GPT-5 和 Claude 4 双推理模型，开箱即用。</p></div><div class="jdui-model-card${JDUI_WIZ.selectedProvider==='custom'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='custom';_renderJduiModelSelect($('jduiWizBody'))"><div class="jdui-model-badge" style="background:rgba(0,0,0,0.05);color:rgba(60,60,67,0.6)">高级路径</div><h4>自定义 API Key</h4><p>使用您自己的 OpenAI、Anthropic 或兼容提供商的 API Key。</p></div></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('env')">上一步</button><button class="jdui-btn-primary" onclick="JDUI_WIZ.selectedProvider==='custom'?_jduiGoStep('apikey'):_jduiGoStep('employee')">下一步</button></div></div>`;
+}
+
+function _renderJduiApiKey(body){
+  const providers=['OpenAI','Anthropic','Compatible'];
+  body.innerHTML=`<div class="jdui-step"><h3>配置 API Key</h3><p class="step-desc">输入您的 API 凭证以连接模型服务</p><div class="jdui-apikey-tabs" id="jduiApiTabs"></div><div class="jdui-form-group"><label>模型名称</label><input class="jdui-input" id="jduiApiModel" value="${JDUI_WIZ.apiModel}" placeholder="gpt-4o"></div><div class="jdui-form-group"><label>Base URL</label><input class="jdui-input" id="jduiApiBaseUrl" value="${JDUI_WIZ.apiBaseUrl}" placeholder="https://api.openai.com/v1"></div><div class="jdui-form-group"><label>API Key</label><input class="jdui-input" id="jduiApiKeyInput" type="password" value="${JDUI_WIZ.apiKey}" placeholder="sk-..."></div><div style="background:rgba(32,108,255,0.06);border-radius:12px;padding:12px 16px;margin-top:8px"><p style="font-size:12px;color:rgba(60,60,67,0.6);font-family:'Inter','Noto Sans SC',sans-serif">系统将自动测试连接可用性，确保 API Key 有效。</p></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('model')">上一步</button><button class="jdui-btn-primary" onclick="_jduiSaveApiKey()">下一步</button></div></div>`;
+  const tabs=$('jduiApiTabs');
+  providers.forEach(p=>{const btn=document.createElement('button');btn.className='jdui-apikey-tab'+(p.toLowerCase()===JDUI_WIZ.apiProvider?' active':'');btn.textContent=p;btn.onclick=()=>{JDUI_WIZ.apiProvider=p.toLowerCase();_renderJduiApiKey(body);};tabs.appendChild(btn);});
+}
+
+function _jduiSaveApiKey(){
+  JDUI_WIZ.apiModel=($('jduiApiModel')||{}).value||'gpt-4o';
+  JDUI_WIZ.apiBaseUrl=($('jduiApiBaseUrl')||{}).value||'';
+  JDUI_WIZ.apiKey=($('jduiApiKeyInput')||{}).value||'';
+  ONBOARDING.form.provider=JDUI_WIZ.apiProvider==='compatible'?'custom':JDUI_WIZ.apiProvider;
+  ONBOARDING.form.model=JDUI_WIZ.apiModel;
+  ONBOARDING.form.baseUrl=JDUI_WIZ.apiBaseUrl;
+  ONBOARDING.form.apiKey=JDUI_WIZ.apiKey;
+  _jduiGoStep('employee');
+}
+
+function _renderJduiCreateEmployee(body){
+  const avatars=typeof EMPLOYEE!=='undefined'?EMPLOYEE.avatars:[];
+  const personalities=typeof EMPLOYEE!=='undefined'?EMPLOYEE.personalities:[];
+  body.innerHTML=`<div class="jdui-step"><h3>创建数字员工</h3><p class="step-desc">自定义您的数字员工形象和职责</p><div class="jdui-avatar-carousel" id="jduiAvatarCarousel"></div><div class="jdui-form-group"><label>员工名称</label><input class="jdui-input" id="jduiEmpName" value="${JDUI_WIZ.employeeName}" oninput="JDUI_WIZ.employeeName=this.value"></div><div class="jdui-form-group"><label>职责描述</label><textarea class="jdui-input" id="jduiEmpDesc" rows="3" placeholder="描述这位数字员工的工作职责和沟通风格..." oninput="JDUI_WIZ.description=this.value" style="resize:vertical">${JDUI_WIZ.description}</textarea></div><label style="font-size:13px;font-weight:500;color:#1a1a1a;font-family:'Inter','Noto Sans SC',sans-serif;margin-top:8px;display:block">性格预设</label><div class="jdui-personality-grid" id="jduiPersonalityGrid"></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('model')">上一步</button><button class="jdui-btn-primary" onclick="_jduiGoStep('confirm')">下一步</button></div></div>`;
+  const carousel=$('jduiAvatarCarousel');
+  avatars.forEach((src,i)=>{const img=document.createElement('img');img.className='jdui-avatar-option'+(i===JDUI_WIZ.avatarIndex?' selected':(Math.abs(i-JDUI_WIZ.avatarIndex)===1?' near':''));img.src=src;img.alt='Avatar '+(i+1);img.onclick=()=>{JDUI_WIZ.avatarIndex=i;_renderJduiCreateEmployee(body);};carousel.appendChild(img);});
+  const grid=$('jduiPersonalityGrid');
+  personalities.slice(0,6).forEach(p=>{const card=document.createElement('div');card.className='jdui-personality-card';card.innerHTML=`<h5>${p.name}</h5><p>${p.desc.slice(0,50)}...</p>`;card.onclick=()=>{JDUI_WIZ.description=p.desc;$('jduiEmpDesc').value=p.desc;};grid.appendChild(card);});
+}
+
+function _renderJduiConfirm(body){
+  const avSrc=typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(JDUI_WIZ.avatarIndex):'/static/avatars/avatar0.png';
+  body.innerHTML=`<div class="jdui-step"><h3>确认信息</h3><p class="step-desc">检查并确认您的数字员工配置</p><div class="jdui-confirm-card"><img class="jdui-confirm-avatar" src="${avSrc}" alt=""><div class="jdui-confirm-info"><div class="jdui-confirm-name">${typeof esc==='function'?esc(JDUI_WIZ.employeeName):JDUI_WIZ.employeeName}</div><div class="jdui-confirm-status"><div class="dot"></div><span>在线 — 准备就绪</span></div></div></div><label style="font-size:14px;font-weight:600;color:#000;margin-top:24px;display:block;font-family:'Inter','Noto Sans SC',sans-serif">人设特质</label><div class="jdui-traits" id="jduiTraits"></div><div class="jdui-trait-add"><input class="jdui-input" id="jduiNewTrait" placeholder="添加新特质..." onkeydown="if(event.key==='Enter')_jduiAddTrait()"><button class="jdui-btn-primary" style="padding:8px 16px" onclick="_jduiAddTrait()">+</button></div><label style="font-size:14px;font-weight:600;color:#000;margin-top:24px;display:block;font-family:'Inter','Noto Sans SC',sans-serif">常用功能</label><div class="jdui-capabilities" id="jduiCapabilities"></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('employee')">上一步</button><button class="jdui-btn-primary" onclick="_jduiGoStep('loading')">启动数字员工</button></div></div>`;
+  _renderJduiTraits();
+  _renderJduiCapabilities();
+}
+
+function _renderJduiTraits(){
+  const container=$('jduiTraits');if(!container)return;container.innerHTML='';
+  JDUI_WIZ.traits.forEach((t,i)=>{const el=document.createElement('div');el.className='jdui-trait';el.innerHTML=`<div class="dot"></div><span>${typeof esc==='function'?esc(t):t}</span><button onclick="JDUI_WIZ.traits.splice(${i},1);_renderJduiTraits()">×</button>`;container.appendChild(el);});
+}
+
+function _jduiAddTrait(){
+  const input=$('jduiNewTrait');if(!input||!input.value.trim())return;
+  JDUI_WIZ.traits.push(input.value.trim());input.value='';_renderJduiTraits();
+}
+
+function _renderJduiCapabilities(){
+  const container=$('jduiCapabilities');if(!container)return;container.innerHTML='';
+  const caps=typeof EMPLOYEE!=='undefined'?EMPLOYEE.defaultCapabilities:[];
+  caps.forEach(c=>{const enabled=JDUI_WIZ.capabilities[c.id]!==false;const el=document.createElement('div');el.className='jdui-capability';el.innerHTML=`<div class="jdui-capability-info"><div class="jdui-capability-icon" style="background:${c.color}20"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${c.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg></div><span class="jdui-capability-name">${c.name}</span></div><label class="jdui-toggle"><input type="checkbox" ${enabled?'checked':''} onchange="JDUI_WIZ.capabilities['${c.id}']=this.checked"><span class="jdui-toggle-slider"></span></label>`;container.appendChild(el);});
+}
+
+function _renderJduiLoading(body){
+  const avSrc=typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(JDUI_WIZ.avatarIndex):'/static/avatars/avatar0.png';
+  body.innerHTML=`<div class="jdui-loading"><div class="jdui-loading-ring"><svg width="140" height="140" viewBox="0 0 140 140" fill="none"><defs><linearGradient id="jduiRingGrad" x1="0" y1="0" x2="140" y2="140" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#b2e40d"/><stop offset="100%" stop-color="#d0ee90" stop-opacity="0.2"/></linearGradient></defs><circle cx="70" cy="70" r="64" stroke="url(#jduiRingGrad)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="280 120"/></svg><img src="${avSrc}" alt=""></div><h3>正在为你准备数字员工</h3><p>请稍作等待，系统正在进行最终的配置与联调...</p></div>`;
+  setTimeout(async()=>{
+    try{
+      if(typeof _saveEmployee==='function') await _saveEmployee({name:JDUI_WIZ.employeeName,avatar_index:JDUI_WIZ.avatarIndex,description:JDUI_WIZ.description,traits:JDUI_WIZ.traits,capabilities:JDUI_WIZ.capabilities});
+      await _finishOnboarding();
+    }catch(e){console.warn('JDUI finish error',e);$('onboardingOverlay').style.display='none';ONBOARDING.active=false;}
+    if(typeof _applyJduiLayout==='function')_applyJduiLayout();
+  },3200);
 }

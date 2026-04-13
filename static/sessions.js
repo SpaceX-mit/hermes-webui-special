@@ -301,6 +301,11 @@ function filterSessions(){
 }
 
 function renderSessionListFromCache(){
+  // JDUI theme: use employee-style session list
+  if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
+    _renderJduiSessionList();
+    return;
+  }
   // Don't re-render while user is actively renaming a session (would destroy the input)
   if(_renamingSid) return;
   closeSessionActionMenu();
@@ -749,4 +754,66 @@ async function _confirmDeleteProject(proj){
   if(_activeProject===proj.project_id) _activeProject=null;
   await renderSessionList();
   showToast('Project deleted');
+}
+
+// ── JDUI employee-style session list ──────────────────────────────────────
+function _renderJduiSessionList(){
+  if(_renamingSid) return;
+  closeSessionActionMenu();
+  const q=($('sessionSearch').value||'').toLowerCase();
+  const filtered=q?_allSessions.filter(s=>(s.title||'Untitled').toLowerCase().includes(q)):_allSessions;
+  const profileFiltered=_showAllProfiles?filtered:filtered.filter(s=>s.is_cli_session||s.profile===S.activeProfile);
+  const sessions=_showArchived?profileFiltered:profileFiltered.filter(s=>!s.archived);
+  const list=$('sessionList');list.innerHTML='';
+  const avatars=typeof EMPLOYEE!=='undefined'?EMPLOYEE.avatars:[];
+  const botName=window._botName||'Hermes';
+  for(let i=0;i<sessions.length;i++){
+    const s=sessions[i];
+    const isActive=S.session&&s.session_id===S.session.session_id;
+    const el=document.createElement('div');
+    el.className='session-item'+(isActive?' active':'');
+    el.style.cssText='display:flex;gap:12px;align-items:center;padding:12px;border-radius:16px;cursor:pointer;';
+    // Avatar
+    const avatar=document.createElement('img');
+    avatar.className='jdui-session-avatar';
+    const empData=s._employee||{};
+    avatar.src=empData.avatar||avatars[i%avatars.length]||'/static/avatars/avatar0.png';
+    avatar.alt='';
+    el.appendChild(avatar);
+    // Info column
+    const info=document.createElement('div');
+    info.className='jdui-session-info';
+    // Row 1: agent name + status badge + time
+    const top=document.createElement('div');
+    top.className='jdui-session-top';
+    const nameRow=document.createElement('div');
+    nameRow.style.cssText='display:flex;align-items:center;gap:6px;min-width:0;';
+    const name=document.createElement('span');
+    name.className='jdui-session-name';
+    name.textContent=empData.name||botName;
+    nameRow.appendChild(name);
+    const statusKey=isActive?'task':(s.pinned?'online':'idle');
+    const badge=_employeeStatusBadge(statusKey);
+    const badgeEl=document.createElement('span');
+    badgeEl.className='jdui-badge';
+    badgeEl.style.cssText='color:'+badge.color+';background:'+badge.bg+';';
+    badgeEl.textContent=badge.text;
+    nameRow.appendChild(badgeEl);
+    top.appendChild(nameRow);
+    const time=document.createElement('span');
+    time.className='jdui-session-time';
+    const ts=(s.updated_at||s.created_at||0)*1000;
+    const ago=Date.now()-ts;
+    time.textContent=ago<60000?'刚刚':ago<3600000?Math.floor(ago/60000)+'m':ago<86400000?Math.floor(ago/3600000)+'h':Math.floor(ago/86400000)+'d';
+    top.appendChild(time);
+    info.appendChild(top);
+    // Row 2: last assistant message
+    const last=document.createElement('p');
+    last.className='jdui-session-last';
+    last.textContent=s.last_message||s.title||'';
+    info.appendChild(last);
+    el.appendChild(info);
+    el.onclick=()=>loadSession(s.session_id);
+    list.appendChild(el);
+  }
 }

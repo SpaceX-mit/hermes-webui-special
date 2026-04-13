@@ -1435,4 +1435,75 @@ function dismissErrorBanner(){
   if(banner) banner.style.display='none';
 }
 
+// ── JDUI Task/Plan Panel ──────────────────────────────────────────────────
+function toggleJduiTaskPanel(){
+  const panel=$('jduiTaskPanel');
+  if(!panel)return;
+  const isOpen=panel.classList.contains('open');
+  panel.classList.toggle('open',!isOpen);
+  const btn=$('btnJduiTaskToggle');
+  if(btn)btn.classList.toggle('active',!isOpen);
+  if(!isOpen) _renderJduiTaskPanelContent();
+}
+
+async function _renderJduiTaskPanelContent(){
+  _renderJduiPlanCard();
+  await _renderJduiTaskCardFromCrons();
+}
+
+function _renderJduiPlanCard(){
+  const list=$('jduiPlanList');
+  if(!list)return;
+  // Build plan items from current session's tool calls
+  const items=[];
+  if(typeof S!=='undefined'&&S.toolCalls&&S.toolCalls.length){
+    S.toolCalls.slice(-5).forEach(tc=>{
+      items.push({label:tc.name||'Task',done:!!tc.done,spinning:!tc.done});
+    });
+  }
+  if(!items.length){
+    items.push({label:'等待任务分配',done:false,spinning:false});
+  }
+  list.innerHTML='';
+  items.forEach(item=>{
+    const el=document.createElement('div');
+    el.className='jdui-plan-item '+(item.done?'done':'pending');
+    const checkClass=item.done?'done':(item.spinning?'spinning':'');
+    let checkSvg;
+    if(item.done){
+      checkSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#b2e40d"/><polyline points="8 12 11 15 16 9" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+    } else if(item.spinning){
+      checkSvg='<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 0 1 7 7" stroke="#b2e40d" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    } else {
+      checkSvg='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="rgba(60,60,67,0.2)" stroke-width="2" fill="none"/></svg>';
+    }
+    el.innerHTML=`<div class="jdui-plan-check ${checkClass}">${checkSvg}</div><span>${item.label}</span>`;
+    list.appendChild(el);
+  });
+}
+
+async function _renderJduiTaskCardFromCrons(){
+  const list=$('jduiTaskList');
+  if(!list)return;
+  list.innerHTML='';
+  try{
+    const data=await api('/api/crons');
+    const crons=data.crons||[];
+    if(!crons.length){
+      list.innerHTML='<div style="font-size:13px;color:rgba(60,60,67,0.5);padding:8px 0;font-family:\'Inter\',\'Noto Sans SC\',sans-serif">暂无任务</div>';
+      return;
+    }
+    crons.forEach(c=>{
+      const el=document.createElement('div');
+      el.className='jdui-task-item';
+      const isActive=!c.paused;
+      const badge=isActive?{text:'定时任务',bg:'#206cff',color:'#fff'}:{text:'已暂停',bg:'rgba(143,143,154,0.1)',color:'rgba(0,0,0,0.3)'};
+      el.innerHTML=`<div class="jdui-task-item-top"><span class="jdui-task-item-title">${c.name||c.prompt||'Task'}</span><span class="jdui-badge" style="color:${badge.color};background:${badge.bg}">${badge.text}</span></div><p class="jdui-task-item-desc">${c.prompt||c.name||''}</p>`;
+      list.appendChild(el);
+    });
+  }catch(e){
+    list.innerHTML='<div style="font-size:13px;color:rgba(60,60,67,0.5)">加载失败</div>';
+  }
+}
+
 // Event wiring

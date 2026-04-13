@@ -476,10 +476,26 @@ function applyBotName(){
   if(msg) msg.placeholder='Message '+name+'\u2026';
 }
 
+// ── JDUI layout toggle ────────────────────────────────────────────────────
+function _applyJduiLayout(){
+  const isJdui=typeof _isJduiTheme==='function'&&_isJduiTheme();
+  const nav=$('jduiNav');
+  const sidebarNav=document.querySelector('.sidebar-nav');
+  if(nav)nav.style.display=isJdui?'flex':'none';
+  if(sidebarNav)sidebarNav.style.display=isJdui?'none':'';
+  document.querySelector('.layout').classList.toggle('jdui-layout',isJdui);
+  // Re-render session list in appropriate style
+  if(typeof renderSessionList==='function')renderSessionList();
+}
+function _jduiNavActivate(btn){
+  document.querySelectorAll('.jdui-nav-item').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 (async()=>{
   // Load send key preference
   let _bootSettings={};
-  try{const s=await api('/api/settings');_bootSettings=s;window._sendKey=s.send_key||'enter';window._showTokenUsage=!!s.show_token_usage;window._showCliSessions=!!s.show_cli_sessions;window._soundEnabled=!!s.sound_enabled;window._notificationsEnabled=!!s.notifications_enabled;window._botName=s.bot_name||'Hermes';const _theme=s.theme||'dark';document.documentElement.dataset.theme=_theme;localStorage.setItem('hermes-theme',_theme);if(s.language&&typeof setLocale==='function'){setLocale(s.language);if(typeof applyLocaleToDOM==='function')applyLocaleToDOM();}applyBotName();}catch(e){window._sendKey='enter';window._showTokenUsage=false;window._showCliSessions=false;window._soundEnabled=false;window._notificationsEnabled=false;window._botName='Hermes';_bootSettings={check_for_updates:false};}
+  try{const s=await api('/api/settings');_bootSettings=s;window._sendKey=s.send_key||'enter';window._showTokenUsage=!!s.show_token_usage;window._showCliSessions=!!s.show_cli_sessions;window._soundEnabled=!!s.sound_enabled;window._notificationsEnabled=!!s.notifications_enabled;window._botName=s.bot_name||'Hermes';const _theme=s.theme||'jdui';document.documentElement.dataset.theme=_theme;localStorage.setItem('hermes-theme',_theme);if(s.language&&typeof setLocale==='function'){setLocale(s.language);if(typeof applyLocaleToDOM==='function')applyLocaleToDOM();}applyBotName();}catch(e){window._sendKey='enter';window._showTokenUsage=false;window._showCliSessions=false;window._soundEnabled=false;window._notificationsEnabled=false;window._botName='Hermes';_bootSettings={check_for_updates:false};}
   // Non-blocking update check (fire-and-forget, once per tab session)
   // ?test_updates=1 in URL forces banner display for testing (bypasses sessionStorage guards)
   const _testUpdates=new URLSearchParams(location.search).get('test_updates')==='1';
@@ -504,6 +520,7 @@ function applyBotName(){
   // Pre-load workspace list so sidebar name is correct from first render
   await loadWorkspaceList();
   await loadOnboardingWizard();
+  _applyJduiLayout();
   _initResizePanels();
   // Restore workspace panel open/closed state from last visit
   if(localStorage.getItem('hermes-webui-workspace-panel')==='open'){

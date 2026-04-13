@@ -531,6 +531,10 @@ def handle_get(handler, parsed) -> bool:
             {"name": get_active_profile_name(), "path": str(get_active_hermes_home())},
         )
 
+    if parsed.path == "/api/employees":
+        from api.employees import list_employees
+        return j(handler, list_employees())
+
     return False  # 404
 
 
@@ -769,6 +773,11 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, _sanitize_error(e), 404)
         except RuntimeError as e:
             return bad(handler, str(e), 409)
+
+    if parsed.path == "/api/employee/create":
+        from api.employees import create_employee
+        emp = create_employee(body)
+        return j(handler, {"ok": True, "employee": emp})
 
     if parsed.path == "/api/profile/create":
         name = body.get("name", "").strip()

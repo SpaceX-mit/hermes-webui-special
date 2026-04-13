@@ -755,6 +755,8 @@ function syncTopbar(){
   // Update profile chip label
   const profileLabel=$('profileChipLabel');
   if(profileLabel) profileLabel.textContent=S.activeProfile||'default';
+  // JDUI topbar override
+  if(typeof _isJduiTheme==='function'&&_isJduiTheme()) _syncJduiTopbar();
 }
 
 function msgContent(m){
@@ -839,6 +841,14 @@ function renderMessages(){
     const tsTitle=tsVal?new Date(tsVal*1000).toLocaleString():'';
     const _bn=window._botName||'Hermes';
     row.innerHTML=`<div class="msg-role ${m.role}" ${tsTitle?`title="${esc(tsTitle)}"`:''}><div class="role-icon ${m.role}">${isUser?'Y':esc(_bn.charAt(0).toUpperCase())}</div><span style="font-size:12px">${isUser?t('you'):esc(_bn)}</span>${tsTitle?`<span class="msg-time">${new Date(tsVal*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`:''}<span class="msg-actions">${editBtn}<button class="msg-copy-btn msg-action-btn" title="${t('copy')}" onclick="copyMsg(this)">${li('copy',13)}</button>${retryBtn}</span></div>${filesHtml}<div class="msg-body">${bodyHtml}</div>`;
+    // JDUI: prepend avatar for assistant messages
+    if(typeof _isJduiTheme==='function'&&_isJduiTheme()&&!isUser){
+      const av=document.createElement('img');
+      av.className='jdui-msg-avatar';
+      av.src=(typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(0):'/static/avatars/avatar0.png');
+      av.alt='';
+      row.insertBefore(av,row.firstChild);
+    }
     row.dataset.rawText = String(content).trim();
     inner.appendChild(row);
   }
@@ -1232,7 +1242,12 @@ function renderMermaidBlocks(){
 function appendThinking(){
   $('emptyState').style.display='none';
   const row=document.createElement('div');row.className='msg-row';row.id='thinkingRow';
-  row.innerHTML=`<div class="msg-role assistant"><div class="role-icon assistant">H</div>Hermes</div><div class="thinking"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+  if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
+    const avSrc=typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(0):'/static/avatars/avatar0.png';
+    row.innerHTML=`<img class="jdui-msg-avatar" src="${avSrc}" alt=""><div class="jdui-typing"><div class="jdui-typing-dot"></div><div class="jdui-typing-dot"></div><div class="jdui-typing-dot"></div></div>`;
+  } else {
+    row.innerHTML=`<div class="msg-role assistant"><div class="role-icon assistant">H</div>Hermes</div><div class="thinking"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+  }
   $('msgInner').appendChild(row);scrollToBottom();
 }
 function removeThinking(){const el=$('thinkingRow');if(el)el.remove();}
@@ -1492,5 +1507,46 @@ async function uploadPendingFiles(){
   S.pendingFiles=[];renderTray();
   if(failures===total&&total>0)throw new Error(t('all_uploads_failed',total));
   return names;
+}
+
+// ── JDUI topbar sync ──────────────────────────────────────────────────────
+function _syncJduiTopbar(){
+  const topbar=document.querySelector('.topbar');
+  if(!topbar)return;
+  // Remove existing JDUI topbar if present
+  const existing=topbar.querySelector('.jdui-topbar');
+  if(existing)existing.remove();
+  // Remove existing sidebar header (old placement)
+  const existingSidebarHdr=document.querySelector('.jdui-sidebar-header');
+  if(existingSidebarHdr)existingSidebarHdr.remove();
+  if(!S.session)return;
+  // Use employee name if available, fallback to bot name, never use session title
+  const activeEmp=typeof _getActiveEmployee==='function'&&_getActiveEmployee();
+  const empName=activeEmp?activeEmp.name:(window._botName||'数字员工');
+
+  // ── Employee info + action buttons in the chat topbar ──
+  const div=document.createElement('div');
+  div.className='jdui-topbar';
+  div.innerHTML=`
+    <div class="jdui-topbar-left">
+      <div class="jdui-topbar-name-row">
+        <span class="jdui-topbar-name">${esc(empName)}</span>
+        <span class="jdui-badge" style="color:#fff;background:#206cff;font-size:10px;padding:2px 8px">任务进行中</span>
+      </div>
+      <span class="jdui-topbar-desc">全能型数字员工，随时为您提供帮助</span>
+    </div>
+    <div class="jdui-topbar-actions">
+      <button title="搜索" onclick="$('sessionSearch').focus()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(60,60,67,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button title="任务面板" onclick="toggleJduiTaskPanel()" id="btnJduiTaskToggle">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(60,60,67,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>
+    </div>`;
+  const origTitle=$('topbarTitle');
+  const origMeta=$('topbarMeta');
+  if(origTitle)origTitle.style.display='none';
+  if(origMeta)origMeta.style.display='none';
+  topbar.appendChild(div);
 }
 
