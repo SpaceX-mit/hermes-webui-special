@@ -101,6 +101,52 @@ LLM 提供商 (OpenAI / Anthropic / ...)
 
 详细架构文档见 [JDUI/ARCHITECTURE.md](JDUI/ARCHITECTURE.md)。
 
+## 代码结构
+
+### 运行代码（vanilla JS + Python，无需构建）
+
+**前端（`static/`）**
+
+| 文件 | 作用 |
+|------|------|
+| `jdui.css` | JDUI 主题全部样式，通过 `[data-theme="jdui"]` 门控 |
+| `employee.js` | 数字员工数据模型、API 调用、激活/切换逻辑 |
+| `onboarding.js` | JDUI 引导向导（环境检测 → 引擎选择 → 创建员工 → 确认 → 加载） |
+| `panels.js` | 员工管理面板（列表、添加、编辑、删除）+ 任务/计划面板 |
+| `sessions.js` | 员工风格会话列表（头像 + 名称 + 状态 + 删除，按 profile 匹配） |
+| `ui.js` | JDUI topbar（员工名/状态/描述）、消息气泡头像、打字指示器 |
+| `boot.js` | JDUI 布局切换、员工数据加载、默认主题设置 |
+| `index.html` | JDUI 导航栏、员工面板、表单弹窗、任务面板的 HTML 结构 |
+| `style.css` | jdui 主题 CSS 变量块 |
+| `avatars/` | 7 张员工头像 PNG + Spacemit 三叶 Logo SVG |
+
+**后端（`api/`）**
+
+| 文件 | 作用 |
+|------|------|
+| `employees.py` | 员工 CRUD + Hermes Profile 同步（SOUL.md、config.yaml、toolsets） |
+| `routes.py` | 员工 API 路由（create / update / delete / activate / list） |
+
+### 设计原型（`JDUI/src/`，仅参考，不参与运行）
+
+| 目录 | 作用 |
+|------|------|
+| `src/app/components/Step1-5*.tsx` | 各引导步骤的 React 原型组件 |
+| `src/app/components/Sidebar.tsx` | 侧边栏原型 |
+| `src/app/components/ui/` | shadcn/ui 组件库（50+ 组件） |
+| `src/imports/` | Figma 导出的 SVG 路径和页面原型 |
+| `src/assets/` | 原型用的头像图片 |
+
+### 文档
+
+| 文件 | 说明 |
+|------|------|
+| `JDUI/ARCHITECTURE.md` | 项目架构（数据流、模块依赖、线程模型） |
+| `JDUI/API_GUIDE.md` | 外部开发者 API 对接指南（含 Python / Node.js 示例） |
+| `JDUI/TECHNICAL.md` | 技术文档（对接原理、全部 60+ 接口、SSE 协议） |
+| `README.md` | 项目总览（本文件） |
+| `SETUP.md` | 本地启动指南和常见问题 |
+
 ## API 对接
 
 提供完整的 HTTP API，支持外部系统对接：
