@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hermes</title>
+<title>JDUI</title>
 <script>(function(){localStorage.setItem('hermes-theme','jdui');document.documentElement.dataset.theme='jdui';})()</script>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/jdui.css">
@@ -197,7 +197,7 @@
           <circle cx="32" cy="10" r="2" fill="#FFF8E1" opacity="0.7"/>
         </svg></span>
         <span class="hermes-launch-copy">
-          <span class="hermes-launch-title">Hermes WebUI</span>
+          <span class="hermes-launch-title">JDUI 控制中心</span>
           <span class="hermes-launch-meta">Preferences, imports, exports</span>
         </span>
         <span class="hermes-launch-chevron" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
@@ -210,7 +210,7 @@
       <button class="mobile-hamburger" id="btnHamburger" onclick="toggleMobileSidebar()" title="Menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
-      <div style="flex:1;min-width:0;overflow:hidden"><div class="topbar-title" id="topbarTitle">Hermes</div><div class="topbar-meta" id="topbarMeta" data-i18n="new_conversation">Start a new conversation</div></div>
+      <div style="flex:1;min-width:0;overflow:hidden"><div class="topbar-title" id="topbarTitle">JDUI</div><div class="topbar-meta" id="topbarMeta" data-i18n="new_conversation">Start a new conversation</div></div>
       <div class="topbar-chips">
         <button class="chip workspace-toggle-btn" id="btnWorkspacePanelToggle" onclick="toggleWorkspacePanel()" title="Show workspace panel" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span class="workspace-toggle-label">Files</span></button>
       </div>
@@ -434,9 +434,9 @@
   <div class="onboarding-card">
     <div class="onboarding-shell">
       <div class="onboarding-sidebar">
-        <div class="onboarding-badge" data-i18n="onboarding_badge">FIRST RUN</div>
-        <h2 id="onboardingTitle" data-i18n="onboarding_title">Welcome to Hermes Web UI</h2>
-        <p id="onboardingLead" data-i18n="onboarding_lead">A quick guided setup will check your Hermes install, choose a workspace and model, and optionally protect the app with a password.</p>
+        <div class="onboarding-badge" data-i18n="onboarding_badge">首次启动</div>
+        <h2 id="onboardingTitle" data-i18n="onboarding_title">欢迎使用 JDUI 数字员工</h2>
+        <p id="onboardingLead" data-i18n="onboarding_lead">快速引导设置将检测环境、选择模型，并创建您的数字员工。</p>
         <div class="onboarding-steps" id="onboardingSteps"></div>
       </div>
       <div class="onboarding-main">
@@ -454,9 +454,9 @@
   <div class="settings-panel">
     <div class="settings-header">
       <div class="settings-heading">
-        <div class="settings-kicker">Hermes WebUI</div>
-        <h3 style="margin:0;font-size:18px">Control Center</h3>
-        <div class="settings-subtitle">Preferences, conversation tools, and system controls.</div>
+        <div class="settings-kicker">JDUI</div>
+        <h3 style="margin:0;font-size:18px">控制中心</h3>
+        <div class="settings-subtitle">偏好设置、对话工具和系统控制。</div>
       </div>
       <button class="panel-icon-btn" onclick="_closeSettingsPanel()" title="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
@@ -496,7 +496,7 @@
             <div class="settings-section-head">
               <div>
                 <div class="settings-section-title">Preferences</div>
-                <div class="settings-section-meta">Defaults and UI behavior for Hermes Web UI.</div>
+                <div class="settings-section-meta">JDUI 默认设置和界面行为。</div>
               </div>
             </div>
             <div class="settings-field">
@@ -571,8 +571,8 @@
             </div>
             <div class="settings-field">
               <label for="settingsBotName" data-i18n="settings_label_bot_name">Assistant Name</label>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:6px" data-i18n="settings_desc_bot_name">Display name for the assistant throughout the UI. Defaults to Hermes.</div>
-              <input type="text" id="settingsBotName" placeholder="Hermes" maxlength="64" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px" data-i18n="settings_desc_bot_name">助手在界面中显示的名称，默认为 JDUI。</div>
+              <input type="text" id="settingsBotName" placeholder="JDUI" maxlength="64" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
             </div>
             <button class="sm-btn" onclick="saveSettings()" style="margin-top:12px;width:100%;padding:8px;font-weight:600" data-i18n="settings_save_btn">Save Settings</button>
           </div>

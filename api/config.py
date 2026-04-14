@@ -236,8 +236,8 @@ def print_startup_config() -> None:
 
     lines = [
         "",
-        "  Hermes Web UI -- startup config",
-        "  --------------------------------",
+        "  JDUI 数字员工平台 -- startup config",
+        "  ------------------------------------",
         f"  repo root   : {REPO_ROOT}",
         f"  agent dir   : {_AGENT_DIR if _AGENT_DIR else 'NOT FOUND'}  {ok if _AGENT_DIR else err}",
         f"  python      : {PYTHON_EXE}",
