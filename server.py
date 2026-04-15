@@ -111,6 +111,13 @@ def main() -> None:
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     DEFAULT_WORKSPACE.mkdir(parents=True, exist_ok=True)
 
+    # Discover and register agent providers (Hermes, OpenClaw, etc.)
+    try:
+        from api.agent_manager import AgentManager
+        AgentManager.auto_discover()
+    except Exception as e:
+        print(f'[!!] WARNING: AgentManager auto_discover failed: {e}', flush=True)
+
     # Start the gateway session watcher for real-time SSE updates
     try:
         from api.gateway_watcher import start_watcher

@@ -535,6 +535,10 @@ def handle_get(handler, parsed) -> bool:
         from api.employees import list_employees
         return j(handler, list_employees())
 
+    if parsed.path == "/api/agent/providers":
+        from api.agent_manager import AgentManager
+        return j(handler, {"providers": AgentManager.list_providers()})
+
     return False  # 404
 
 
@@ -809,6 +813,17 @@ def handle_post(handler, parsed) -> bool:
             return j(handler, {"ok": True, "active": result.get("active", "")})
         except (ValueError, RuntimeError) as exc:
             return j(handler, {"error": str(exc)}, status=409)
+
+    if parsed.path == "/api/agent/provider/set-default":
+        from api.agent_manager import AgentManager
+        pid = body.get("provider_id", "").strip()
+        if not pid:
+            return bad(handler, "provider_id is required")
+        try:
+            AgentManager.set_default(pid)
+            return j(handler, {"ok": True, "default": pid})
+        except ValueError as exc:
+            return j(handler, {"error": str(exc)}, status=404)
 
     if parsed.path == "/api/profile/create":
         name = body.get("name", "").strip()
@@ -1493,9 +1508,20 @@ def _handle_chat_start(handler, body):
     q = queue.Queue()
     with STREAMS_LOCK:
         STREAMS[stream_id] = q
+    # Resolve agent provider for this session's employee
+    _agent_provider_id = None
+    if hasattr(s, 'profile') and s.profile:
+        try:
+            from api.employees import list_employees
+            for _emp in list_employees().get('employees', []):
+                if _emp.get('profile_name') == s.profile:
+                    _agent_provider_id = _emp.get('agent_provider')
+                    break
+        except Exception:
+            pass
     thr = threading.Thread(
         target=_run_agent_streaming,
-        args=(s.session_id, msg, model, workspace, stream_id, attachments),
+        args=(s.session_id, msg, model, workspace, stream_id, attachments, _agent_provider_id),
         daemon=True,
     )
     thr.start()

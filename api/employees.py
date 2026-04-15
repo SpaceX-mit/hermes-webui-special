@@ -155,6 +155,7 @@ def create_employee(body):
         'traits': traits,
         'capabilities': capabilities,
         'profile_name': profile_name,
+        'agent_provider': body.get('agent_provider', 'hermes'),
         'created_at': time.time(),
     }
 
@@ -179,7 +180,7 @@ def update_employee(emp_id, body):
             soul_changed = False
             caps_changed = False
 
-            for key in ('name', 'avatar_index', 'description', 'traits', 'capabilities'):
+            for key in ('name', 'avatar_index', 'description', 'traits', 'capabilities', 'agent_provider'):
                 if key in body:
                     emp[key] = body[key]
                     if key in ('name', 'description', 'traits'):

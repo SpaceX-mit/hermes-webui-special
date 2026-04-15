@@ -79,7 +79,7 @@ def _sse(handler, event, data):
     handler.wfile.flush()
 
 
-def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, attachments=None):
+def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, attachments=None, agent_provider_id=None):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id]."""
     q = STREAMS.get(stream_id)
     if q is None:
@@ -183,13 +183,8 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                 except ImportError:
                     pass
 
-            _AIAgent = _get_ai_agent()
-            if _AIAgent is None:
-                raise ImportError("AIAgent not available -- check that hermes-agent is on sys.path")
+            # ── Resolve model, provider, API key ──
             resolved_model, resolved_provider, resolved_base_url = resolve_model_provider(model)
-
-            # Resolve API key via Hermes runtime provider (matches gateway behaviour).
-            # Pass the resolved provider so non-default providers get their own credentials.
             resolved_api_key = None
             try:
                 from hermes_cli.runtime_provider import resolve_runtime_provider
@@ -213,7 +208,6 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
             # Fallback model from profile config (e.g. for rate-limit recovery)
             _fallback = _cfg.get('fallback_model') or None
             if _fallback:
-                # Resolve the fallback through our provider logic too
                 fb_model = _fallback.get('model', '')
                 fb_provider = _fallback.get('provider', '')
                 fb_base_url = _fallback.get('base_url')
@@ -225,23 +219,26 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
             else:
                 _fallback_resolved = None
 
-            agent = _AIAgent(
+            # ── Create agent via AgentManager ──
+            from api.agent_manager import AgentManager
+            _provider = AgentManager.get_provider(agent_provider_id)
+            _iagent = _provider.create_agent(
                 model=resolved_model,
                 provider=resolved_provider,
                 base_url=resolved_base_url,
                 api_key=resolved_api_key,
-                platform='cli',
-                quiet_mode=True,
-                enabled_toolsets=_toolsets,
+                toolsets=_toolsets,
                 fallback_model=_fallback_resolved,
                 session_id=session_id,
-                stream_delta_callback=on_token,
-                tool_progress_callback=on_tool,
+                on_token=on_token,
+                on_tool=on_tool,
             )
+            # For Hermes provider, expose the raw AIAgent for legacy attribute access
+            agent = getattr(_iagent, 'raw_agent', _iagent)
 
             # Store agent instance for cancel/interrupt propagation
             with STREAMS_LOCK:
-                AGENT_INSTANCES[stream_id] = agent
+                AGENT_INSTANCES[stream_id] = _iagent
                 # Check if cancel was requested during agent initialization
                 if stream_id in CANCEL_FLAGS and CANCEL_FLAGS[stream_id].is_set():
                     # Cancel arrived during agent creation - interrupt immediately
