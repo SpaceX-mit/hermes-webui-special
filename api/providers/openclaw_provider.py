@@ -137,7 +137,8 @@ class OpenClawAgent(IAgent):
             try:
                 agent = client.get_agent(self._model)
 
-                async for event in agent.execute_stream(full_message):
+                stream = await agent.execute_stream(full_message)
+                async for event in stream:
                     if self._interrupted:
                         break
                     et = event.event_type
