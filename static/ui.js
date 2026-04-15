@@ -825,10 +825,16 @@ function renderMessages(){
     const isUser=m.role==='user';
     const isLastAssistant=!isUser&&vi===visWithIdx.length-1;
     // Render thinking card before the assistant message (collapsed by default)
+    // In JDUI: thinking card sits above the bubble, aligned with the avatar
+    let thinkingHtml='';
     if(thinkingText&&!isUser){
-      const thinkRow=document.createElement('div');thinkRow.className='msg-row thinking-card-row';
-      thinkRow.innerHTML=`<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(thinkingText)}</pre></div></div>`;
-      inner.appendChild(thinkRow);
+      if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
+        thinkingHtml=`<div class="jdui-thinking-card"><div class="jdui-thinking-header" onclick="this.parentElement.classList.toggle('open')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.2 6H8.2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="17" x2="15" y2="17"/><line x1="10" y1="20" x2="14" y2="20"/></svg><span>Thinking</span><svg class="jdui-thinking-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div><div class="jdui-thinking-body"><pre>${esc(thinkingText)}</pre></div></div>`;
+      } else {
+        const thinkRow=document.createElement('div');thinkRow.className='msg-row thinking-card-row';
+        thinkRow.innerHTML=`<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(thinkingText)}</pre></div></div>`;
+        inner.appendChild(thinkRow);
+      }
     }
     const row=document.createElement('div');row.className='msg-row';
     row.dataset.msgIdx=rawIdx;row.dataset.role=m.role||'assistant';
@@ -843,22 +849,28 @@ function renderMessages(){
     const tsTitle=tsVal?new Date(tsVal*1000).toLocaleString():'';
     const _bn=window._botName||'Hermes';
     row.innerHTML=`<div class="msg-role ${m.role}" ${tsTitle?`title="${esc(tsTitle)}"`:''}><div class="role-icon ${m.role}">${isUser?'Y':esc(_bn.charAt(0).toUpperCase())}</div><span style="font-size:12px">${isUser?t('you'):esc(_bn)}</span>${tsTitle?`<span class="msg-time">${new Date(tsVal*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`:''}<span class="msg-actions">${editBtn}<button class="msg-copy-btn msg-action-btn" title="${t('copy')}" onclick="copyMsg(this)">${li('copy',13)}</button>${retryBtn}</span></div>${filesHtml}<div class="msg-body">${bodyHtml}</div>`;
-    // JDUI: prepend avatar for all messages
+    // JDUI: restructure with avatar + content column (thinking card above bubble)
     if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
       if(isUser){
-        // User avatar: colored circle with initial
         const av=document.createElement('div');
         av.className='jdui-msg-avatar jdui-user-avatar';
         av.textContent='U';
         row.insertBefore(av,row.firstChild);
       } else {
-        // Employee avatar
+        // Wrap msg-body (and thinking card) in a column container
         const av=document.createElement('img');
         av.className='jdui-msg-avatar';
         const activeEmp=typeof _getActiveEmployee==='function'&&_getActiveEmployee();
         av.src=activeEmp?_getEmployeeAvatar(activeEmp.avatar_index):(typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(0):'/static/avatars/avatar0.png');
         av.alt='';
+        const col=document.createElement('div');
+        col.className='jdui-msg-col';
+        if(thinkingHtml) col.insertAdjacentHTML('beforeend',thinkingHtml);
+        // Move msg-body into column
+        const body=row.querySelector('.msg-body');
+        if(body) col.appendChild(body);
         row.insertBefore(av,row.firstChild);
+        row.appendChild(col);
       }
     }
     row.dataset.rawText = String(content).trim();
