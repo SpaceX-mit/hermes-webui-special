@@ -1510,15 +1510,23 @@ def _handle_chat_start(handler, body):
         STREAMS[stream_id] = q
     # Resolve agent provider for this session's employee
     _agent_provider_id = None
-    if hasattr(s, 'profile') and s.profile:
-        try:
-            from api.employees import list_employees
-            for _emp in list_employees().get('employees', []):
+    try:
+        from api.employees import list_employees
+        _all_emps = list_employees().get('employees', [])
+        # Match by profile_name (Hermes) or by session profile field
+        if hasattr(s, 'profile') and s.profile:
+            for _emp in _all_emps:
                 if _emp.get('profile_name') == s.profile:
                     _agent_provider_id = _emp.get('agent_provider')
                     break
-        except Exception:
-            pass
+        # Fallback: check if employee_id is set on session
+        if not _agent_provider_id and hasattr(s, 'employee_id') and s.employee_id:
+            for _emp in _all_emps:
+                if _emp.get('id') == s.employee_id:
+                    _agent_provider_id = _emp.get('agent_provider')
+                    break
+    except Exception:
+        pass
     thr = threading.Thread(
         target=_run_agent_streaming,
         args=(s.session_id, msg, model, workspace, stream_id, attachments, _agent_provider_id),

@@ -159,14 +159,14 @@ def create_employee(body):
         'created_at': time.time(),
     }
 
-    # Create a real Hermes profile cloned from default
-    try:
-        create_profile_api(profile_name, clone_from='default', clone_config=True)
-        _write_soul_md(profile_name, _generate_soul_md(name, description, traits))
-        _update_profile_toolsets(profile_name, capabilities)
-    except Exception:
-        # Profile creation failed -- employee record is still usable
-        pass
+    # Only create Hermes profile for Hermes provider employees
+    if emp['agent_provider'] == 'hermes':
+        try:
+            create_profile_api(profile_name, clone_from='default', clone_config=True)
+            _write_soul_md(profile_name, _generate_soul_md(name, description, traits))
+            _update_profile_toolsets(profile_name, capabilities)
+        except Exception:
+            pass
 
     data['employees'].append(emp)
     _save_employees(data)
@@ -190,8 +190,9 @@ def update_employee(emp_id, body):
 
             _save_employees(data)
 
-            # Sync changes to the Hermes profile
-            profile_name = emp.get('profile_name')
+            # Only sync to Hermes profile for Hermes provider employees
+            if emp.get('agent_provider', 'hermes') == 'hermes':
+                profile_name = emp.get('profile_name')
             if profile_name:
                 try:
                     if soul_changed:
@@ -214,34 +215,47 @@ def update_employee(emp_id, body):
 
 def delete_employee(emp_id):
     data = _load_employees()
-    # Find the employee to get profile_name before removal
-    profile_name = None
+    # Find the employee before removal
+    target_emp = None
     for e in data['employees']:
         if e['id'] == emp_id:
-            profile_name = e.get('profile_name')
+            target_emp = e
             break
 
     before = len(data['employees'])
     data['employees'] = [e for e in data['employees'] if e['id'] != emp_id]
     if len(data['employees']) < before:
         _save_employees(data)
-        # Clean up the Hermes profile
-        if profile_name:
-            try:
-                delete_profile_api(profile_name)
-            except Exception:
-                pass
+        # Only clean up Hermes profile for Hermes provider employees
+        if target_emp and target_emp.get('agent_provider', 'hermes') == 'hermes':
+            profile_name = target_emp.get('profile_name')
+            if profile_name:
+                try:
+                    delete_profile_api(profile_name)
+                except Exception:
+                    pass
         return True
     return False
 
 
 def activate_employee(emp_id):
-    """Switch the active Hermes profile to this employee's profile."""
+    """Activate an employee. For Hermes: switch profile. For others: just return info."""
     data = _load_employees()
     for emp in data['employees']:
         if emp['id'] == emp_id:
-            profile_name = emp.get('profile_name')
-            if not profile_name:
-                return None
-            return switch_profile(profile_name)
+            provider = emp.get('agent_provider', 'hermes')
+            profile_name = emp.get('profile_name', '')
+
+            if provider == 'hermes':
+                # Hermes employees need a real profile switch
+                if not profile_name:
+                    return None
+                return switch_profile(profile_name)
+            else:
+                # Non-Hermes employees: no profile switch needed,
+                # just return the employee info so frontend can track it
+                return {
+                    'active': profile_name or f'emp-{emp_id}',
+                    'agent_provider': provider,
+                }
     return None
