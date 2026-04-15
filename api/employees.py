@@ -193,21 +193,21 @@ def update_employee(emp_id, body):
             # Only sync to Hermes profile for Hermes provider employees
             if emp.get('agent_provider', 'hermes') == 'hermes':
                 profile_name = emp.get('profile_name')
-            if profile_name:
-                try:
-                    if soul_changed:
-                        _write_soul_md(
-                            profile_name,
-                            _generate_soul_md(
-                                emp['name'],
-                                emp.get('description', ''),
-                                emp.get('traits', []),
-                            ),
-                        )
-                    if caps_changed:
-                        _update_profile_toolsets(profile_name, emp.get('capabilities', {}))
-                except Exception:
-                    pass
+                if profile_name:
+                    try:
+                        if soul_changed:
+                            _write_soul_md(
+                                profile_name,
+                                _generate_soul_md(
+                                    emp['name'],
+                                    emp.get('description', ''),
+                                    emp.get('traits', []),
+                                ),
+                            )
+                        if caps_changed:
+                            _update_profile_toolsets(profile_name, emp.get('capabilities', {}))
+                    except Exception:
+                        pass
 
             return emp
     return None
