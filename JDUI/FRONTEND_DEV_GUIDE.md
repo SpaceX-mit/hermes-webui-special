@@ -258,6 +258,35 @@ Response: {"ok": true, "active": "emp-a1b2c3d4e5f6"}
 
 > 激活后应创建新会话（带 employee_id），确保聊天路由到正确的 Agent Provider。
 
+#### 获取员工的所有会话
+
+```
+GET /api/employee/sessions?employee_id=a1b2c3d4e5f6
+```
+
+```json
+// 响应
+{
+  "employee_id": "a1b2c3d4e5f6",
+  "employee_name": "代码助手",
+  "agent_provider": "hermes",
+  "count": 5,
+  "sessions": [
+    {
+      "session_id": "xxx",
+      "title": "快速排序",
+      "message_count": 4,
+      "updated_at": 1776224538,
+      "model": "claude-sonnet-4-20250514",
+      "pinned": false,
+      "archived": false
+    }
+  ]
+}
+```
+
+> 按 `updated_at` 倒序排列。详细文档见 [EMPLOYEE_SESSIONS_API.md](EMPLOYEE_SESSIONS_API.md)。
+
 ### 3.2 Agent Provider
 
 #### 列出所有 Provider
