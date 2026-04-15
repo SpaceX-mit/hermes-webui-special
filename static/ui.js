@@ -1530,6 +1530,12 @@ function _syncJduiTopbar(){
   const statusBg=isBusy?'#206cff':(S.messages&&S.messages.length>0?'#4EA100':'rgba(143,143,154,0.15)');
   const statusColor=isBusy||S.messages&&S.messages.length>0?'#fff':'rgba(60,60,67,0.5)';
 
+  // Determine agent provider
+  const providerName=activeEmp&&activeEmp.agent_provider?activeEmp.agent_provider:'hermes';
+  const providerLabel=providerName.charAt(0).toUpperCase()+providerName.slice(1);
+  const providerBg=providerName==='openclaw'?'rgba(102,126,234,0.12)':'rgba(178,228,13,0.12)';
+  const providerColor=providerName==='openclaw'?'#667eea':'#558b2f';
+
   // ── Employee info + action buttons in the chat topbar ──
   const div=document.createElement('div');
   div.className='jdui-topbar';
@@ -1538,6 +1544,7 @@ function _syncJduiTopbar(){
       <div class="jdui-topbar-name-row">
         <span class="jdui-topbar-name">${esc(empName)}</span>
         <span class="jdui-badge" style="color:${statusColor};background:${statusBg};font-size:10px;padding:2px 8px">${statusText}</span>
+        <span class="jdui-badge" style="color:${providerColor};background:${providerBg};font-size:9px;padding:2px 6px;letter-spacing:0.3px">${providerLabel}</span>
       </div>
       <span class="jdui-topbar-desc">${esc(empDesc)}</span>
     </div>
