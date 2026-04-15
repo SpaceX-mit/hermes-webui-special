@@ -81,6 +81,7 @@ def _sse(handler, event, data):
 
 def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, attachments=None, agent_provider_id=None):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id]."""
+    print(f'[streaming] start: session={session_id}, provider={agent_provider_id}, model={model}', flush=True)
     q = STREAMS.get(stream_id)
     if q is None:
         return

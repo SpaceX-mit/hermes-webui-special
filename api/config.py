@@ -1014,6 +1014,8 @@ _SETTINGS_DEFAULTS = {
     "sound_enabled": False,  # play notification sound when assistant finishes
     "notifications_enabled": False,  # browser notification when tab is in background
     "password_hash": None,  # PBKDF2-HMAC-SHA256 hash; None = auth disabled
+    "openclaw_gateway_url": "",  # OpenClaw gateway WebSocket URL
+    "openclaw_api_key": "",  # OpenClaw bearer token
 }
 
 
