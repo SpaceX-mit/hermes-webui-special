@@ -111,11 +111,13 @@
 [data-theme="jdui"] .settings-overlay{background:rgba(0,0,0,.3);}
 
 /* ── Message bubbles ── */
-[data-theme="jdui"] .msg-row{gap:12px;}
+[data-theme="jdui"] .msg-row{gap:12px;align-items:flex-start;}
 .jdui-msg-avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.jdui-user-avatar{background:#206CFF;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;font-family:'Inter',sans-serif;}
 [data-theme="jdui"] .msg-body{max-width:520px;}
 [data-theme="jdui"] .msg-row.assistant .msg-body{background:rgba(143,143,154,0.1);border-radius:6px 16px 16px 16px;padding:16px;}
-[data-theme="jdui"] .msg-row.user .msg-body{background:#b2e40d;border-radius:16px 16px 6px 16px;padding:16px;margin-left:auto;}
+[data-theme="jdui"] .msg-row.user{flex-direction:row-reverse;}
+[data-theme="jdui"] .msg-row.user .msg-body{background:#b2e40d;border-radius:16px 6px 16px 16px;padding:16px;}
 [data-theme="jdui"] .msg-row.user .msg-text{color:#000;}
 [data-theme="jdui"] .msg-role{display:none;}
 [data-theme="jdui"] .role-icon{display:none;}

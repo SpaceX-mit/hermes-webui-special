@@ -843,13 +843,23 @@ function renderMessages(){
     const tsTitle=tsVal?new Date(tsVal*1000).toLocaleString():'';
     const _bn=window._botName||'Hermes';
     row.innerHTML=`<div class="msg-role ${m.role}" ${tsTitle?`title="${esc(tsTitle)}"`:''}><div class="role-icon ${m.role}">${isUser?'Y':esc(_bn.charAt(0).toUpperCase())}</div><span style="font-size:12px">${isUser?t('you'):esc(_bn)}</span>${tsTitle?`<span class="msg-time">${new Date(tsVal*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`:''}<span class="msg-actions">${editBtn}<button class="msg-copy-btn msg-action-btn" title="${t('copy')}" onclick="copyMsg(this)">${li('copy',13)}</button>${retryBtn}</span></div>${filesHtml}<div class="msg-body">${bodyHtml}</div>`;
-    // JDUI: prepend avatar for assistant messages
-    if(typeof _isJduiTheme==='function'&&_isJduiTheme()&&!isUser){
-      const av=document.createElement('img');
-      av.className='jdui-msg-avatar';
-      av.src=(typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(0):'/static/avatars/avatar0.png');
-      av.alt='';
-      row.insertBefore(av,row.firstChild);
+    // JDUI: prepend avatar for all messages
+    if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
+      if(isUser){
+        // User avatar: colored circle with initial
+        const av=document.createElement('div');
+        av.className='jdui-msg-avatar jdui-user-avatar';
+        av.textContent='U';
+        row.insertBefore(av,row.firstChild);
+      } else {
+        // Employee avatar
+        const av=document.createElement('img');
+        av.className='jdui-msg-avatar';
+        const activeEmp=typeof _getActiveEmployee==='function'&&_getActiveEmployee();
+        av.src=activeEmp?_getEmployeeAvatar(activeEmp.avatar_index):(typeof _getEmployeeAvatar==='function'?_getEmployeeAvatar(0):'/static/avatars/avatar0.png');
+        av.alt='';
+        row.insertBefore(av,row.firstChild);
+      }
     }
     row.dataset.rawText = String(content).trim();
     inner.appendChild(row);
