@@ -1681,25 +1681,22 @@ async function _loadEmployeePanel() {
 }
 
 async function _showEmployeeSessions(emp) {
-  // Show this employee's sessions in the main chat area
-  const messagesEl = $('messages');
-  if (!messagesEl) return;
-
-  // Hide empty state and messages
-  $('emptyState').style.display = 'none';
-  const inner = $('msgInner');
-  if (inner) inner.innerHTML = '';
-
-  // Create sessions panel in the messages area
-  let panel = $('empSessionsPanel');
+  // Show this employee's sessions in a right-side card
+  let panel = $('empSessionsCard');
   if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'empSessionsPanel';
-    panel.style.cssText = 'padding:32px;max-width:640px;margin:0 auto;width:100%;';
-    messagesEl.appendChild(panel);
+    panel = document.createElement('aside');
+    panel.id = 'empSessionsCard';
+    panel.className = 'jdui-emp-sessions-card';
+    // Insert after main, before rightpanel
+    const main = document.querySelector('main.main');
+    if (main && main.parentNode) {
+      main.parentNode.insertBefore(panel, main.nextSibling);
+    } else {
+      document.querySelector('.layout').appendChild(panel);
+    }
   }
-  panel.style.display = '';
-  panel.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px">加载中...</div>';
+  panel.classList.add('open');
+  panel.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:32px">加载中...</div>';
 
   try {
     const data = await api(`/api/employee/sessions?employee_id=${encodeURIComponent(emp.id)}`);
@@ -1710,64 +1707,67 @@ async function _showEmployeeSessions(emp) {
     const providerBg = emp.agent_provider === 'openclaw' ? 'rgba(102,126,234,0.1)' : 'rgba(178,228,13,0.1)';
 
     let html = `
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
-        <img src="${avSrc}" style="width:56px;height:56px;border-radius:50%;object-fit:cover" alt="">
-        <div>
-          <div style="font-size:18px;font-weight:700;color:var(--text);font-family:'Inter','Noto Sans SC',sans-serif">${emp.name || '未命名'}
-            <span class="jdui-badge" style="color:${providerColor};background:${providerBg};font-size:10px;padding:2px 8px;margin-left:6px">${providerLabel}</span>
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">${emp.description || '无描述'}</div>
-        </div>
-      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <span style="font-size:14px;font-weight:600;color:var(--text);font-family:'Inter','Noto Sans SC',sans-serif">历史对话 (${sessions.length})</span>
-        <button class="jdui-btn-primary" style="padding:8px 20px;font-size:13px" onclick="_startNewChatWithEmployee('${emp.id}','${(emp.name||'').replace(/'/g,"\\'")}')">+ 新建对话</button>
-      </div>`;
+        <div style="display:flex;align-items:center;gap:12px">
+          <img src="${avSrc}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" alt="">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--text);font-family:'Inter','Noto Sans SC',sans-serif">${emp.name || '未命名'}
+              <span class="jdui-badge" style="color:${providerColor};background:${providerBg};font-size:9px;padding:2px 6px">${providerLabel}</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">${emp.description ? emp.description.slice(0, 25) + (emp.description.length > 25 ? '...' : '') : ''}</div>
+          </div>
+        </div>
+        <button onclick="_closeEmployeeSessions()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <button class="jdui-btn-primary" style="width:100%;padding:10px;font-size:13px;margin-bottom:16px" onclick="_startNewChatWithEmployee('${emp.id}','${(emp.name||'').replace(/'/g,"\\'")}')">+ 新建对话</button>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">历史对话 (${sessions.length})</div>`;
 
     if (!sessions.length) {
-      html += '<div style="text-align:center;color:var(--muted);font-size:13px;padding:32px 0">暂无对话记录，点击上方按钮开始</div>';
+      html += '<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px 0">暂无对话记录</div>';
     } else {
-      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
       sessions.forEach(s => {
         const title = s.title || 'Untitled';
         const msgCount = s.message_count || 0;
+        if (title === 'Untitled' && !msgCount) return;
         const ts = (s.updated_at || s.created_at || 0) * 1000;
         const ago = Date.now() - ts;
-        const timeStr = ago < 60000 ? '刚刚' : ago < 3600000 ? Math.floor(ago / 60000) + '分钟前' : ago < 86400000 ? Math.floor(ago / 3600000) + '小时前' : Math.floor(ago / 86400000) + '天前';
-        if (title === 'Untitled' && !msgCount) return; // skip empty
+        const timeStr = ago < 60000 ? '刚刚' : ago < 3600000 ? Math.floor(ago / 60000) + 'm' : ago < 86400000 ? Math.floor(ago / 3600000) + 'h' : Math.floor(ago / 86400000) + 'd';
         html += `
-          <div class="jdui-emp-session-item" onclick="_loadSessionFromEmployee('${s.session_id}','${emp.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;transition:all .2s;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:14px;font-weight:500;color:var(--text);font-family:'Inter','Noto Sans SC',sans-serif">${title.length > 40 ? title.slice(0, 40) + '...' : title}</span>
-              <span style="font-size:11px;color:var(--muted)">${timeStr}</span>
+          <div class="jdui-emp-session-item" onclick="_loadSessionFromEmployee('${s.session_id}','${emp.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;transition:all .2s;">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;font-weight:500;color:var(--text);font-family:'Inter','Noto Sans SC',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${title}</span>
+              <span style="font-size:10px;color:var(--muted);flex-shrink:0;margin-left:8px">${timeStr}</span>
             </div>
-            <div style="font-size:11px;color:var(--muted)">${msgCount} 条消息</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${msgCount} 条消息</div>
           </div>`;
       });
       html += '</div>';
     }
     panel.innerHTML = html;
   } catch (e) {
-    panel.innerHTML = '<div style="color:var(--accent);font-size:13px;text-align:center;padding:24px">加载失败: ' + e.message + '</div>';
+    panel.innerHTML = '<div style="color:var(--accent);font-size:12px;text-align:center;padding:24px">加载失败</div>';
   }
 }
 
+function _closeEmployeeSessions() {
+  const panel = $('empSessionsCard');
+  if (panel) panel.classList.remove('open');
+}
+
 async function _startNewChatWithEmployee(empId, empName) {
+  _closeEmployeeSessions();
   const ok = await _activateEmployee(empId);
   if (ok) showToast('已切换到 ' + empName);
-  // Hide sessions panel
-  const panel = $('empSessionsPanel');
-  if (panel) panel.style.display = 'none';
   await _loadEmployeePanel();
 }
 
 async function _loadSessionFromEmployee(sessionId, empId) {
-  // Activate employee first, then load the session
+  _closeEmployeeSessions();
   await _activateEmployee(empId);
   await loadSession(sessionId);
-  // Hide sessions panel
-  const panel = $('empSessionsPanel');
-  if (panel) panel.style.display = 'none';
 }
 
 function _openAddEmployeeForm() {

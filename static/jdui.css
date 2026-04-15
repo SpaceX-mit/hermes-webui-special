@@ -350,7 +350,9 @@
 .jdui-topbar-actions button.active{opacity:1;}
 .jdui-topbar-actions button.active svg{color:#206cff;}
 
-/* ── Employee session list (in main area) ── */
+/* ── Employee session list (right-side card) ── */
+.jdui-emp-sessions-card{display:none;width:0;overflow:hidden;background:#f5f5f5;border-radius:20px;flex-shrink:0;transition:width .35s cubic-bezier(.4,0,.2,1),padding .35s,opacity .3s;opacity:0;flex-direction:column;margin:8px 0 8px 8px;}
+.jdui-emp-sessions-card.open{display:flex;width:280px;padding:20px;opacity:1;overflow-y:auto;}
 .jdui-emp-session-item:hover{background:rgba(178,228,13,0.04)!important;border-color:rgba(178,228,13,0.2)!important;}
 
 /* ── Employee management panel ── */
