@@ -313,7 +313,7 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                     s.estimated_cost = (s.estimated_cost or 0) + _usage.estimated_cost_usd
                 s.save()
                 put('done', {
-                    'session': s.compact(),
+                    'session': s.compact() | {'messages': s.messages},
                     'usage': {
                         'input_tokens': _usage.input_tokens,
                         'output_tokens': _usage.output_tokens,
