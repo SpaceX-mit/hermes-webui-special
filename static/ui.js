@@ -810,13 +810,13 @@ function renderMessages(){
       const thinkMatch=content.match(/<think>([\s\S]*?)<\/think>/);
       if(thinkMatch){
         thinkingText=thinkMatch[1].trim();
-        content=content.replace(/<think>[\s\S]*?<\/think>\s*/,'').trimStart();
+        content=content.replace(/<think>[\s\S]*?<\/think>\s*/g,'').trimStart();
       }
       if(!thinkingText){
         const gemmaMatch=content.match(/<\|channel>thought\n([\s\S]*?)<channel\|>/);
         if(gemmaMatch){
           thinkingText=gemmaMatch[1].trim();
-          content=content.replace(/<\|channel>thought\n[\s\S]*?<channel\|>\s*/,'').trimStart();
+          content=content.replace(/<\|channel>thought\n[\s\S]*?<channel\|>\s*/g,'').trimStart();
         }
       }
     }
