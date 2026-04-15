@@ -558,6 +558,20 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/session/new":
         s = new_session(workspace=body.get("workspace"), model=body.get("model"))
+        # If employee_id is provided, tag the session with the employee's profile
+        _emp_id = body.get("employee_id", "").strip()
+        if _emp_id:
+            try:
+                from api.employees import list_employees
+                for _emp in list_employees().get('employees', []):
+                    if _emp.get('id') == _emp_id:
+                        s.profile = _emp.get('profile_name', s.profile)
+                        if hasattr(s, 'employee_id'):
+                            s.employee_id = _emp_id
+                        s.save()
+                        break
+            except Exception:
+                pass
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
     if parsed.path == "/api/sessions/cleanup":

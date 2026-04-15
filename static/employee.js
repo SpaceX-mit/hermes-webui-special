@@ -141,12 +141,32 @@ async function _activateEmployee(id) {
       EMPLOYEE.active = id;
       localStorage.setItem('jdui-active-employee', id);
       if (data.active) S.activeProfile = data.active;
-      // Start a fresh session for this employee
-      if (typeof newSession === 'function') await newSession(true);
+      // Start a fresh session tagged with this employee
+      await _newSessionForEmployee(id);
       if (typeof syncTopbar === 'function') syncTopbar();
       if (typeof renderSessionList === 'function') renderSessionList();
       return true;
     }
   } catch (e) { /* ignore */ }
   return false;
+}
+
+async function _newSessionForEmployee(empId) {
+  if (typeof MSG_QUEUE !== 'undefined') MSG_QUEUE.length = 0;
+  if (typeof updateQueueBadge === 'function') updateQueueBadge();
+  S.toolCalls = [];
+  if (typeof clearLiveToolCards === 'function') clearLiveToolCards();
+  const ws = S.session ? S.session.workspace : null;
+  const model = $('modelSelect') ? $('modelSelect').value : '';
+  const data = await api('/api/session/new', {
+    method: 'POST',
+    body: JSON.stringify({ model: model, workspace: ws, employee_id: empId }),
+  });
+  S.session = data.session;
+  S.messages = data.session.messages || [];
+  S.session._flash = true;
+  localStorage.setItem('hermes-webui-session', S.session.session_id);
+  if (typeof syncTopbar === 'function') syncTopbar();
+  if (typeof loadDir === 'function') await loadDir('.');
+  if (typeof renderMessages === 'function') renderMessages();
 }
