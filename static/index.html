@@ -475,6 +475,10 @@
             <svg class="settings-tab-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>
             <span class="settings-tab-title">System</span>
           </button>
+          <button class="settings-tab" id="settingsTabAgents" type="button" role="tab" aria-selected="false" aria-controls="settingsPaneAgents" onclick="switchSettingsSection('agents')">
+            <svg class="settings-tab-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="settings-tab-title">Agents</span>
+          </button>
         </div>
         <div class="settings-main">
           <div class="settings-pane active" id="settingsPaneConversation" role="tabpanel" aria-labelledby="settingsTabConversation">
@@ -594,6 +598,17 @@
             <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:16px">
               <button class="sm-btn" id="btnRerunOnboarding" onclick="_triggerOnboardingRerun()" style="width:100%;padding:10px;font-weight:600;color:#b2e40d;border-color:rgba(178,228,13,.3)">下次进入时显示引导页</button>
             </div>
+          </div>
+          <!-- Agents pane -->
+          <div class="settings-pane" id="settingsPaneAgents" role="tabpanel" aria-labelledby="settingsTabAgents">
+            <div class="settings-section-head">
+              <div>
+                <div class="settings-section-title">Agent 平台</div>
+                <div class="settings-section-meta">已注册的 Agent Provider 及其状态和接口实现情况。</div>
+              </div>
+              <button class="sm-btn" onclick="_loadAgentProvidersPanel()" style="padding:4px 10px;font-size:11px">刷新</button>
+            </div>
+            <div id="agentProvidersPanel" style="margin-top:12px"><div style="color:var(--muted);font-size:12px">加载中...</div></div>
           </div>
         </div>
       </div>

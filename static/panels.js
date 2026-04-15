@@ -1056,10 +1056,10 @@ let _settingsThemeOnOpen = null; // track theme at open time for discard revert
 let _settingsSection = 'conversation';
 
 function switchSettingsSection(name){
-  const section=(name==='preferences'||name==='system')?name:'conversation';
+  const section=(name==='preferences'||name==='system'||name==='agents')?name:'conversation';
   _settingsSection=section;
-  const map={conversation:'Conversation',preferences:'Preferences',system:'System'};
-  ['conversation','preferences','system'].forEach(key=>{
+  const map={conversation:'Conversation',preferences:'Preferences',system:'System',agents:'Agents'};
+  ['conversation','preferences','system','agents'].forEach(key=>{
     const tab=$('settingsTab'+map[key]);
     const pane=$('settingsPane'+map[key]);
     const active=key===section;
@@ -1069,6 +1069,7 @@ function switchSettingsSection(name){
     }
     if(pane) pane.classList.toggle('active',active);
   });
+  if(section==='agents') _loadAgentProvidersPanel();
 }
 
 function _syncHermesPanelSessionActions(){
@@ -1513,6 +1514,102 @@ async function _renderJduiTaskCardFromCrons(){
     });
   }catch(e){
     list.innerHTML='<div style="font-size:13px;color:rgba(60,60,67,0.5)">加载失败</div>';
+  }
+}
+
+// ── Agent Providers Panel (Settings > Agents tab) ─────────────────────────
+async function _loadAgentProvidersPanel(){
+  const box=$('agentProvidersPanel');
+  if(!box)return;
+  box.innerHTML='<div style="color:var(--muted);font-size:12px">加载中...</div>';
+  try{
+    const data=await api('/api/agent/providers');
+    const providers=data.providers||[];
+    if(!providers.length){
+      box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:12px 0">未发现任何 Agent Provider</div>';
+      return;
+    }
+    box.innerHTML='';
+    providers.forEach(p=>{
+      const card=document.createElement('div');
+      card.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;';
+      // Header: name + status + default badge
+      const hdr=document.createElement('div');
+      hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;';
+      const left=document.createElement('div');
+      left.style.cssText='display:flex;align-items:center;gap:10px;';
+      const name=document.createElement('span');
+      name.style.cssText='font-size:16px;font-weight:700;color:var(--text);font-family:"Inter","Noto Sans SC",sans-serif;';
+      name.textContent=p.id.charAt(0).toUpperCase()+p.id.slice(1);
+      left.appendChild(name);
+      // Available badge
+      const avBadge=document.createElement('span');
+      avBadge.className='jdui-badge';
+      avBadge.style.cssText=p.available?'color:#fff;background:#4EA100;':'color:rgba(60,60,67,0.5);background:rgba(143,143,154,0.1);';
+      avBadge.textContent=p.available?'可用':'不可用';
+      left.appendChild(avBadge);
+      if(p.is_default){
+        const defBadge=document.createElement('span');
+        defBadge.className='jdui-badge';
+        defBadge.style.cssText='color:#fff;background:#206cff;';
+        defBadge.textContent='默认';
+        left.appendChild(defBadge);
+      }
+      hdr.appendChild(left);
+      // Set default button
+      if(!p.is_default&&p.available){
+        const btn=document.createElement('button');
+        btn.className='sm-btn';
+        btn.style.cssText='padding:4px 12px;font-size:11px;';
+        btn.textContent='设为默认';
+        btn.onclick=async()=>{
+          await api('/api/agent/provider/set-default',{method:'POST',body:JSON.stringify({provider_id:p.id})});
+          showToast('已设为默认: '+p.id);
+          _loadAgentProvidersPanel();
+        };
+        hdr.appendChild(btn);
+      }
+      card.appendChild(hdr);
+      // Interfaces table
+      if(p.interfaces&&p.interfaces.length){
+        const table=document.createElement('div');
+        table.style.cssText='font-size:12px;';
+        const thead=document.createElement('div');
+        thead.style.cssText='display:flex;padding:6px 0;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;';
+        thead.innerHTML='<span style="flex:1">接口方法</span><span style="width:80px;text-align:center">状态</span>';
+        table.appendChild(thead);
+        p.interfaces.forEach(iface=>{
+          const row=document.createElement('div');
+          row.style.cssText='display:flex;padding:6px 0;border-bottom:1px solid var(--border);align-items:center;';
+          const nameCol=document.createElement('span');
+          nameCol.style.cssText='flex:1;font-family:monospace;color:var(--text);';
+          nameCol.textContent=iface.name;
+          const statusCol=document.createElement('span');
+          statusCol.style.cssText='width:80px;text-align:center;';
+          if(iface.status==='implemented'){
+            statusCol.innerHTML='<span style="color:#4EA100;font-weight:600">✓ 已实现</span>';
+          } else if(iface.status==='not_implemented'){
+            statusCol.innerHTML='<span style="color:#FF7024;font-weight:600">✗ 未实现</span>';
+          } else {
+            statusCol.innerHTML='<span style="color:var(--muted)">? 未知</span>';
+          }
+          row.appendChild(nameCol);
+          row.appendChild(statusCol);
+          table.appendChild(row);
+        });
+        card.appendChild(table);
+      }
+      // Models
+      if(p.models&&p.models.length){
+        const modelsDiv=document.createElement('div');
+        modelsDiv.style.cssText='margin-top:12px;font-size:11px;color:var(--muted);';
+        modelsDiv.textContent='支持模型: '+p.models.map(m=>m.id||m).join(', ');
+        card.appendChild(modelsDiv);
+      }
+      box.appendChild(card);
+    });
+  }catch(e){
+    box.innerHTML='<div style="color:var(--accent);font-size:12px">加载失败: '+e.message+'</div>';
   }
 }
 

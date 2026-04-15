@@ -347,3 +347,84 @@ api/
 3. 安装 openclaw-sdk → 重启 → providers 列表出现 openclaw
 4. 创建 openclaw 员工 → 聊天走 OpenClaw 通道
 5. 切换回 hermes 员工 → 聊天恢复 Hermes 通道
+
+---
+
+## 12. 实施记录
+
+> 以下为已完成的实施内容，记录实际代码和文件。
+
+### 12.1 已创建文件
+
+| 文件 | 说明 |
+|------|------|
+| `api/agent_provider.py` | 接口定义：`IAgentProvider`、`IAgent`、`AgentResult`、`AgentUsage` |
+| `api/agent_manager.py` | `AgentManager` 类：注册、发现、获取、列表、设置默认 |
+| `api/providers/__init__.py` | providers 包初始化 |
+| `api/providers/hermes_provider.py` | `HermesProvider` + `HermesAgent`：封装 `run_agent.AIAgent` |
+| `api/providers/openclaw_provider.py` | `OpenClawProvider` + `OpenClawAgent`：预留 stub（`NotImplementedError`） |
+
+### 12.2 已改造文件
+
+| 文件 | 改动 |
+|------|------|
+| `api/streaming.py` | `_run_agent_streaming()` 通过 `AgentManager.get_provider()` 创建 agent，新增 `agent_provider_id` 参数 |
+| `api/routes.py` | 新增 `GET /api/agent/providers`、`POST /api/agent/provider/set-default`；聊天启动时按员工 `agent_provider` 字段路由 |
+| `api/employees.py` | 员工记录新增 `agent_provider` 字段（默认 `'hermes'`），`update_employee` 支持更新该字段 |
+| `server.py` | 启动时调用 `AgentManager.auto_discover()` 注册所有可用 provider |
+
+### 12.3 IAgentProvider 接口方法
+
+| 方法 | 返回类型 | 说明 |
+|------|----------|------|
+| `get_provider_id()` | `str` | 唯一标识，如 `'hermes'`、`'openclaw'` |
+| `is_available()` | `bool` | 依赖是否已安装 |
+| `get_supported_models()` | `List[Dict]` | 该 provider 支持的模型列表 |
+| `create_agent(...)` | `IAgent` | 创建一个 agent 运行实例 |
+
+### 12.4 IAgent 接口方法
+
+| 方法 | 返回类型 | 说明 |
+|------|----------|------|
+| `run(user_message, system_message, conversation_history, session_id, personality)` | `AgentResult` | 执行对话，通过 `on_token`/`on_tool` 回调流式输出 |
+| `interrupt(reason)` | `None` | 中断执行 |
+| `get_usage()` | `AgentUsage` | 获取 token 用量和成本 |
+
+### 12.5 新增 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/agent/providers` | 列出所有已注册 provider 及状态 |
+| POST | `/api/agent/provider/set-default` | 设置默认 provider → body: `{provider_id}` |
+
+### 12.6 HermesProvider 实现状态
+
+| 接口方法 | 状态 | 说明 |
+|----------|------|------|
+| `get_provider_id()` | ✅ 已实现 | 返回 `'hermes'` |
+| `is_available()` | ✅ 已实现 | 检查 `from run_agent import AIAgent` |
+| `get_supported_models()` | ✅ 已实现 | 从 `config.yaml` 读取 |
+| `create_agent()` | ✅ 已实现 | 创建 `HermesAgent` 封装 `AIAgent` |
+| `IAgent.run()` | ✅ 已实现 | 调用 `AIAgent.run_conversation()`，返回 `AgentResult` |
+| `IAgent.interrupt()` | ✅ 已实现 | 调用 `AIAgent.interrupt()` |
+| `IAgent.get_usage()` | ✅ 已实现 | 读取 `session_prompt_tokens` 等属性 |
+
+### 12.7 OpenClawProvider 实现状态
+
+| 接口方法 | 状态 | 说明 |
+|----------|------|------|
+| `get_provider_id()` | ✅ 已实现 | 返回 `'openclaw'` |
+| `is_available()` | ✅ 已实现 | 检查 `import openclaw_sdk` |
+| `get_supported_models()` | ⏳ 待实现 | 返回空列表 |
+| `create_agent()` | ✅ 已实现 | 创建 `OpenClawAgent` |
+| `IAgent.run()` | ❌ 未实现 | 抛出 `NotImplementedError` |
+| `IAgent.interrupt()` | ✅ 已实现 | 设置中断标志 |
+| `IAgent.get_usage()` | ✅ 已实现 | 返回空用量 |
+
+### 12.8 启动日志示例
+
+```
+[agent-manager] registered provider: hermes (available=True)
+[agent-manager] registered provider: openclaw (available=False)
+JDUI 数字员工平台 listening on http://0.0.0.0:8787
+```
