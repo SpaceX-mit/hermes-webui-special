@@ -1517,6 +1517,30 @@ async function _renderJduiTaskCardFromCrons(){
   }
 }
 
+// ── OpenClaw config save/load ─────────────────────────────────────────────
+async function _loadOpenclawConfig(){
+  try{
+    const s=await api('/api/settings');
+    const urlInput=$('settingsOpenclawUrl');
+    const keyInput=$('settingsOpenclawKey');
+    if(urlInput)urlInput.value=s.openclaw_gateway_url||'';
+    if(keyInput)keyInput.value=s.openclaw_api_key||'';
+  }catch(e){}
+}
+
+async function _saveOpenclawConfig(){
+  const url=($('settingsOpenclawUrl')||{}).value||'';
+  const key=($('settingsOpenclawKey')||{}).value||'';
+  const status=$('openclawConfigStatus');
+  try{
+    await api('/api/settings',{method:'POST',body:JSON.stringify({openclaw_gateway_url:url,openclaw_api_key:key})});
+    if(status){status.style.display='block';status.style.color='#4EA100';status.textContent='配置已保存';setTimeout(()=>{status.style.display='none';},3000);}
+    showToast('OpenClaw 配置已保存');
+  }catch(e){
+    if(status){status.style.display='block';status.style.color='var(--accent)';status.textContent='保存失败: '+e.message;}
+  }
+}
+
 // ── Agent Providers Panel (Settings > Agents tab) ─────────────────────────
 async function _loadAgentProvidersPanel(){
   const box=$('agentProvidersPanel');
@@ -1608,6 +1632,8 @@ async function _loadAgentProvidersPanel(){
       }
       box.appendChild(card);
     });
+    // Load OpenClaw config into the form
+    _loadOpenclawConfig();
   }catch(e){
     box.innerHTML='<div style="color:var(--accent);font-size:12px">加载失败: '+e.message+'</div>';
   }
@@ -1618,6 +1644,7 @@ let _empFormEditId = null;
 let _empFormAvatarIdx = 0;
 let _empFormTraits = [];
 let _empFormCapabilities = { search: true, memory: true, autoExec: false, knowledge: true };
+let _empFormProvider = 'hermes';
 
 async function _loadEmployeePanel() {
   const box = $('employeesPanel');
@@ -1661,6 +1688,8 @@ function _openAddEmployeeForm() {
   $('empFormTitle').textContent = '添加数字员工';
   $('empFormName').value = '';
   $('empFormDesc').value = '';
+  _empFormProvider = 'hermes';
+  _renderEmpFormProviders();
   _empFormTraits = ['专业高效', '善于沟通', '持续学习'];
   _empFormCapabilities = { search: true, memory: true, autoExec: false, knowledge: true };
   $('empFormId').value = '';
@@ -1680,6 +1709,8 @@ function _openEditEmployeeForm(id) {
   $('empFormTitle').textContent = '编辑数字员工';
   $('empFormName').value = emp.name || '';
   $('empFormDesc').value = emp.description || '';
+  _empFormProvider = emp.agent_provider || 'hermes';
+  _renderEmpFormProviders();
   _empFormTraits = emp.traits || ['专业高效', '善于沟通', '持续学习'];
   _empFormCapabilities = emp.capabilities || { search: true, memory: true, autoExec: false, knowledge: true };
   $('empFormId').value = id;
@@ -1727,7 +1758,7 @@ async function _submitEmployeeForm() {
   const desc = ($('empFormDesc').value || '').trim();
   const traits = _empFormTraits || [];
   const caps = _empFormCapabilities || {};
-  const data = { name, avatar_index: _empFormAvatarIdx, description: desc, traits, capabilities: caps };
+  const data = { name, avatar_index: _empFormAvatarIdx, description: desc, traits, capabilities: caps, agent_provider: _empFormProvider };
   if (_empFormEditId) {
     data.id = _empFormEditId;
     const result = await _updateEmployee(data);
@@ -1746,6 +1777,26 @@ async function _confirmDeleteEmployee(id, name) {
   await _deleteEmployeeById(id);
   showToast('员工已删除');
   await _loadEmployeePanel();
+}
+
+async function _renderEmpFormProviders(){
+  const sel=$('empFormProvider');
+  if(!sel)return;
+  sel.innerHTML='';
+  try{
+    const data=await api('/api/agent/providers');
+    (data.providers||[]).forEach(p=>{
+      const opt=document.createElement('option');
+      opt.value=p.id;
+      opt.textContent=p.id.charAt(0).toUpperCase()+p.id.slice(1)+(p.available?'':' (不可用)');
+      opt.disabled=!p.available;
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    sel.innerHTML='<option value="hermes">Hermes</option>';
+  }
+  sel.value=_empFormProvider;
+  sel.onchange=function(){_empFormProvider=this.value;};
 }
 
 function _renderEmpFormTraits() {

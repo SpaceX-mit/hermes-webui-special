@@ -234,7 +234,11 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                 on_tool=on_tool,
             )
             # For Hermes provider, expose the raw AIAgent for legacy attribute access
-            agent = getattr(_iagent, 'raw_agent', _iagent)
+            _is_hermes = hasattr(_iagent, 'raw_agent')
+            if _is_hermes:
+                agent = _iagent.raw_agent
+            else:
+                agent = _iagent
 
             # Store agent instance for cancel/interrupt propagation
             with STREAMS_LOCK:
@@ -283,7 +287,39 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                         _personality_prompt = str(_pval)
             # Pass personality via ephemeral_system_prompt (agent's own mechanism)
             if _personality_prompt:
-                agent.ephemeral_system_prompt = _personality_prompt
+                if _is_hermes:
+                    agent.ephemeral_system_prompt = _personality_prompt
+            if not _is_hermes:
+                # Non-Hermes provider: use IAgent.run() standard interface
+                _agent_result = _iagent.run(
+                    user_message=workspace_ctx + msg_text,
+                    system_message=workspace_system_msg,
+                    conversation_history=_sanitize_messages_for_api(s.messages),
+                    session_id=session_id,
+                    personality=_personality_prompt,
+                )
+                s.messages = _agent_result.messages or s.messages
+                # Build usage and timestamps, then jump to done
+                _usage = _agent_result.usage
+                import time as _time
+                for m in s.messages:
+                    if '_ts' not in m:
+                        m['_ts'] = _time.time()
+                s.updated_at = _time.time()
+                s.input_tokens = (s.input_tokens or 0) + (_usage.input_tokens or 0)
+                s.output_tokens = (s.output_tokens or 0) + (_usage.output_tokens or 0)
+                if _usage.estimated_cost_usd:
+                    s.estimated_cost = (s.estimated_cost or 0) + _usage.estimated_cost_usd
+                s.save()
+                put('done', {
+                    'session': s.compact(),
+                    'usage': {
+                        'input_tokens': _usage.input_tokens,
+                        'output_tokens': _usage.output_tokens,
+                        'estimated_cost': _usage.estimated_cost_usd,
+                    },
+                })
+                return  # Skip Hermes-specific post-processing
             result = agent.run_conversation(
                 user_message=workspace_ctx + msg_text,
                 system_message=workspace_system_msg,

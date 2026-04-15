@@ -609,6 +609,19 @@
               <button class="sm-btn" onclick="_loadAgentProvidersPanel()" style="padding:4px 10px;font-size:11px">刷新</button>
             </div>
             <div id="agentProvidersPanel" style="margin-top:12px"><div style="color:var(--muted);font-size:12px">加载中...</div></div>
+<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
+  <div class="settings-section-title" style="font-size:14px;margin-bottom:12px">OpenClaw 连接配置</div>
+  <div class="settings-field">
+    <label for="settingsOpenclawUrl">Gateway URL</label>
+    <input type="text" id="settingsOpenclawUrl" placeholder="http://127.0.0.1:18789" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
+  </div>
+  <div class="settings-field">
+    <label for="settingsOpenclawKey">API Key (Bearer Token)</label>
+    <input type="password" id="settingsOpenclawKey" placeholder="输入 Bearer Token" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:13px">
+  </div>
+  <button class="sm-btn" onclick="_saveOpenclawConfig()" style="margin-top:8px;width:100%;padding:8px;font-weight:600;color:#b2e40d;border-color:rgba(178,228,13,.3)">保存 OpenClaw 配置</button>
+  <div id="openclawConfigStatus" style="font-size:11px;margin-top:6px;display:none"></div>
+</div>
           </div>
         </div>
       </div>
@@ -675,6 +688,7 @@
       <button class="panel-icon-btn" onclick="_closeEmployeeForm()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="jdui-emp-form-body">
+      <div class="jdui-form-group"><label>Agent 平台</label><select class="jdui-input" id="empFormProvider"></select></div>
       <div class="jdui-avatar-carousel" id="empFormAvatars"></div>
       <div class="jdui-form-group"><label>员工名称</label><input class="jdui-input" id="empFormName" placeholder="输入员工名称"></div>
       <div class="jdui-form-group"><label>职责描述</label><textarea class="jdui-input" id="empFormDesc" rows="3" placeholder="描述这位数字员工的工作职责..." style="resize:vertical"></textarea></div>
