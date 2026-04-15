@@ -144,22 +144,33 @@ class OpenClawAgent(IAgent):
                     et = event.event_type
                     data = event.data or {}
 
-                    if et == EventType.CONTENT:
+                    # OpenClaw streams 'agent' events with payload.stream='assistant'
+                    if et == EventType.AGENT:
+                        payload = data.get('payload', {}) if isinstance(data, dict) else {}
+                        if payload.get('stream') == 'assistant':
+                            delta = (payload.get('data') or {}).get('delta', '')
+                            if delta:
+                                self._on_token(delta)
+                                result_text += delta
+
+                    elif et == EventType.CONTENT:
                         text = data.get('text', '') if isinstance(data, dict) else str(data)
                         if text:
                             self._on_token(text)
                             result_text += text
 
                     elif et == EventType.TOOL_CALL:
-                        name = data.get('name', 'tool') if isinstance(data, dict) else 'tool'
-                        args = data.get('args', {}) if isinstance(data, dict) else {}
-                        preview = data.get('preview', '') if isinstance(data, dict) else ''
+                        payload = data.get('payload', data) if isinstance(data, dict) else {}
+                        name = payload.get('name', 'tool') if isinstance(payload, dict) else 'tool'
+                        args = payload.get('args', {}) if isinstance(payload, dict) else {}
+                        preview = payload.get('preview', '') if isinstance(payload, dict) else ''
                         self._on_tool(name, preview, args if isinstance(args, dict) else {})
 
                     elif et == EventType.DONE:
                         # Extract token usage from done event
-                        if isinstance(data, dict) and 'token_usage' in data:
-                            tu = data['token_usage']
+                        payload = data.get('payload', data) if isinstance(data, dict) else {}
+                        tu = payload.get('tokenUsage', payload.get('token_usage', {})) if isinstance(payload, dict) else {}
+                        if tu:
                             usage = AgentUsage(
                                 input_tokens=tu.get('input', 0),
                                 output_tokens=tu.get('output', 0),
@@ -167,7 +178,8 @@ class OpenClawAgent(IAgent):
                         break
 
                     elif et == EventType.ERROR:
-                        err_msg = data.get('message', str(data)) if isinstance(data, dict) else str(data)
+                        payload = data.get('payload', data) if isinstance(data, dict) else {}
+                        err_msg = payload.get('message', str(data)) if isinstance(payload, dict) else str(data)
                         raise RuntimeError(f"OpenClaw error: {err_msg}")
 
                 # Try to get usage from execution result if not from done event
