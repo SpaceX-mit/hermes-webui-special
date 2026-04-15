@@ -1,7 +1,11 @@
 """
 OpenClawProvider — Connects to an OpenClaw Gateway via openclaw-sdk.
 Requires `pip install openclaw-sdk` to activate.
+
+SDK is fully async; we use asyncio.run() to bridge into the sync
+streaming thread used by JDUI's SSE engine.
 """
+import asyncio
 import os
 from typing import Callable, Dict, List, Optional
 
@@ -30,7 +34,7 @@ def _get_openclaw_config() -> dict:
             pass
 
     return {
-        'gateway_url': gateway_url or 'http://127.0.0.1:18789',
+        'gateway_url': gateway_url or 'ws://127.0.0.1:18789',
         'api_key': api_key or '',
     }
 
@@ -48,24 +52,33 @@ class OpenClawProvider(IAgentProvider):
             return False
 
     def get_supported_models(self) -> List[Dict]:
-        """Query the OpenClaw gateway for available models."""
-        cfg = _get_openclaw_config()
+        """Query the OpenClaw gateway for available agents/models."""
         try:
-            import urllib.request
-            import json
-            url = cfg['gateway_url'].rstrip('/') + '/api/models'
-            req = urllib.request.Request(url)
-            if cfg['api_key']:
-                req.add_header('Authorization', f"Bearer {cfg['api_key']}")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
-                if isinstance(data, list):
-                    return data
-                if isinstance(data, dict):
-                    return data.get('models', data.get('data', []))
+            cfg = _get_openclaw_config()
+
+            async def _list():
+                from openclaw_sdk import OpenClawClient
+                client = await OpenClawClient.connect(
+                    gateway_ws_url=cfg['gateway_url'],
+                    api_key=cfg['api_key'] or None,
+                )
+                try:
+                    agents = await asyncio.wait_for(
+                        asyncio.coroutine(client.list_agents)()
+                        if asyncio.iscoroutinefunction(client.list_agents)
+                        else asyncio.get_event_loop().run_in_executor(None, client.list_agents),
+                        timeout=5,
+                    )
+                    return [{'id': a.agent_id, 'name': getattr(a, 'name', a.agent_id)} for a in agents]
+                finally:
+                    if asyncio.iscoroutinefunction(client.close):
+                        await client.close()
+                    else:
+                        client.close()
+
+            return asyncio.run(_list())
         except Exception:
-            pass
-        return []
+            return []
 
     def create_agent(self,
                      model: str,
@@ -81,8 +94,8 @@ class OpenClawProvider(IAgentProvider):
         cfg = _get_openclaw_config()
         return OpenClawAgent(
             model=model,
-            base_url=base_url or cfg['gateway_url'],
-            api_key=api_key or cfg['api_key'],
+            gateway_url=cfg['gateway_url'],
+            gateway_key=cfg['api_key'],
             session_id=session_id,
             on_token=on_token,
             on_tool=on_tool,
@@ -90,12 +103,13 @@ class OpenClawProvider(IAgentProvider):
 
 
 class OpenClawAgent(IAgent):
-    """Wraps openclaw-sdk Agent.execute_stream()."""
+    """Wraps openclaw-sdk async Agent via asyncio.run()."""
 
-    def __init__(self, *, model, base_url, api_key, session_id, on_token, on_tool):
+    def __init__(self, *, model, gateway_url, gateway_key,
+                 session_id, on_token, on_tool):
         self._model = model
-        self._base_url = base_url or 'http://127.0.0.1:18789'
-        self._api_key = api_key
+        self._gateway_url = gateway_url
+        self._gateway_key = gateway_key
         self._session_id = session_id
         self._on_token = on_token
         self._on_tool = on_tool
@@ -104,42 +118,82 @@ class OpenClawAgent(IAgent):
 
     def run(self, user_message, system_message, conversation_history,
             session_id, personality=None):
-        from openclaw_sdk import OpenClawClient
-
-        client = OpenClawClient(base_url=self._base_url, api_key=self._api_key)
-        agent = client.get_agent(self._model)
 
         full_message = user_message
         if personality:
             full_message = personality + '\n\n' + user_message
 
         result_text = ''
-        for event in agent.execute_stream(full_message):
-            if self._interrupted:
-                break
-            if event.type == 'token':
-                self._on_token(event.text)
-                result_text += event.text
-            elif event.type == 'tool_use':
-                name = getattr(event, 'name', 'tool')
-                preview = getattr(event, 'preview', '')
-                args = getattr(event, 'args', {}) or {}
-                self._on_tool(name, preview, args)
+        usage = AgentUsage()
+
+        async def _execute():
+            nonlocal result_text, usage
+            from openclaw_sdk import OpenClawClient, EventType
+
+            client = await OpenClawClient.connect(
+                gateway_ws_url=self._gateway_url,
+                api_key=self._gateway_key or None,
+            )
+            try:
+                agent = client.get_agent(self._model)
+
+                async for event in agent.execute_stream(full_message):
+                    if self._interrupted:
+                        break
+                    et = event.event_type
+                    data = event.data or {}
+
+                    if et == EventType.CONTENT:
+                        text = data.get('text', '') if isinstance(data, dict) else str(data)
+                        if text:
+                            self._on_token(text)
+                            result_text += text
+
+                    elif et == EventType.TOOL_CALL:
+                        name = data.get('name', 'tool') if isinstance(data, dict) else 'tool'
+                        args = data.get('args', {}) if isinstance(data, dict) else {}
+                        preview = data.get('preview', '') if isinstance(data, dict) else ''
+                        self._on_tool(name, preview, args if isinstance(args, dict) else {})
+
+                    elif et == EventType.DONE:
+                        # Extract token usage from done event
+                        if isinstance(data, dict) and 'token_usage' in data:
+                            tu = data['token_usage']
+                            usage = AgentUsage(
+                                input_tokens=tu.get('input', 0),
+                                output_tokens=tu.get('output', 0),
+                            )
+                        break
+
+                    elif et == EventType.ERROR:
+                        err_msg = data.get('message', str(data)) if isinstance(data, dict) else str(data)
+                        raise RuntimeError(f"OpenClaw error: {err_msg}")
+
+                # Try to get usage from execution result if not from done event
+                if not usage.input_tokens:
+                    result = getattr(agent, '_last_result', None)
+                    if result and hasattr(result, 'token_usage') and result.token_usage:
+                        tu = result.token_usage
+                        usage = AgentUsage(
+                            input_tokens=getattr(tu, 'input', 0) or 0,
+                            output_tokens=getattr(tu, 'output', 0) or 0,
+                        )
+            finally:
+                if asyncio.iscoroutinefunction(client.close):
+                    await client.close()
+                else:
+                    client.close()
+
+        # Run async code in sync context
+        asyncio.run(_execute())
+
+        self._usage = usage
 
         # Build messages list
         messages = list(conversation_history) if conversation_history else []
         messages.append({'role': 'user', 'content': user_message})
         if result_text:
             messages.append({'role': 'assistant', 'content': result_text})
-
-        # Extract usage from agent cost tracker if available
-        cost_tracker = getattr(agent, 'cost_tracker', None)
-        if cost_tracker:
-            self._usage = AgentUsage(
-                input_tokens=getattr(cost_tracker, 'input_tokens', 0) or 0,
-                output_tokens=getattr(cost_tracker, 'output_tokens', 0) or 0,
-                estimated_cost_usd=getattr(cost_tracker, 'estimated_cost_usd', 0.0) or 0.0,
-            )
 
         return AgentResult(messages=messages, usage=self._usage)
 
