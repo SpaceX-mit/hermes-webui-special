@@ -762,8 +762,21 @@ function _renderJduiSessionList(){
   closeSessionActionMenu();
   const q=($('sessionSearch').value||'').toLowerCase();
   const filtered=q?_allSessions.filter(s=>(s.title||'Untitled').toLowerCase().includes(q)):_allSessions;
-  // Show all profiles' sessions so user can see all employees' conversations
-  const sessions=(_showArchived?filtered:filtered.filter(s=>!s.archived));
+  // Filter by active employee's profile, and hide empty untitled sessions
+  const activeEmp=typeof EMPLOYEE!=='undefined'&&EMPLOYEE.active?EMPLOYEE.employees.find(e=>e.id===EMPLOYEE.active):null;
+  const activeProfile=activeEmp?activeEmp.profile_name:null;
+  let sessions=_showArchived?filtered:filtered.filter(s=>!s.archived);
+  if(activeProfile){
+    sessions=sessions.filter(s=>s.profile===activeProfile);
+  }
+  // Hide empty "Untitled" sessions (no messages sent yet)
+  sessions=sessions.filter(s=>{
+    if(s.title&&s.title!=='Untitled')return true;
+    if(s.last_message)return true;
+    // Keep the currently active session even if empty
+    if(S.session&&s.session_id===S.session.session_id)return true;
+    return false;
+  });
   const list=$('sessionList');list.innerHTML='';
   const avatars=typeof EMPLOYEE!=='undefined'?EMPLOYEE.avatars:[];
   const employees=typeof EMPLOYEE!=='undefined'?EMPLOYEE.employees:[];
