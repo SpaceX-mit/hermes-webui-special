@@ -1674,11 +1674,25 @@ async function _loadEmployeePanel() {
         <button title="编辑" onclick="event.stopPropagation();_openEditEmployeeForm('${emp.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
         <button class="danger" title="删除" onclick="event.stopPropagation();_confirmDeleteEmployee('${emp.id}','${(emp.name||'').replace(/'/g,"\\'")}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
       </div>`;
-    card.onclick = () => {
+    card.onclick = async () => {
       EMPLOYEE.active = emp.id;
       localStorage.setItem('jdui-active-employee', emp.id);
-      // Re-render list to update active border
       _loadEmployeePanel();
+      // Load the employee's latest session into chat area
+      try {
+        const data = await api(`/api/employee/sessions?employee_id=${encodeURIComponent(emp.id)}`);
+        const sessions = (data.sessions || []).filter(s => (s.title && s.title !== 'Untitled') || s.message_count > 0);
+        if (sessions.length > 0) {
+          // Load the most recent session
+          await _activateEmployee(emp.id);
+          await loadSession(sessions[0].session_id);
+        } else {
+          // No existing sessions — activate and create a fresh one
+          await _activateEmployee(emp.id);
+        }
+      } catch (e) {
+        await _activateEmployee(emp.id);
+      }
       _showEmployeeSessions(emp);
     };
     list.appendChild(card);
