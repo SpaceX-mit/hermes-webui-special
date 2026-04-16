@@ -794,6 +794,11 @@ let _profilesCache = null;
 async function loadProfilesPanel() {
   const panel = $('profilesPanel');
   if (!panel) return;
+  // Build employee name lookup
+  const empNames = {};
+  if (typeof EMPLOYEE !== 'undefined' && EMPLOYEE.employees) {
+    EMPLOYEE.employees.forEach(e => { if (e.profile_name) empNames[e.profile_name] = e.name; });
+  }
   try {
     const data = await api('/api/profiles');
     _profilesCache = data;
@@ -818,7 +823,7 @@ async function loadProfilesPanel() {
       card.innerHTML = `
         <div class="profile-card-header">
           <div style="min-width:0;flex:1">
-            <div class="profile-card-name${isActive ? ' is-active' : ''}">${gwDot}${esc(p.name)}${p.is_default ? ' <span style="opacity:.5">(default)</span>' : ''}${activeBadge}</div>
+            <div class="profile-card-name${isActive ? ' is-active' : ''}">${gwDot}${esc(empNames[p.name] || p.name)}${p.is_default ? ' <span style="opacity:.5">(default)</span>' : ''}${activeBadge}</div>
             ${meta.length ? `<div class="profile-card-meta">${esc(meta.join(' \u00b7 '))}</div>` : '<div class="profile-card-meta">No configuration</div>'}
           </div>
           <div class="profile-card-actions">
@@ -839,6 +844,11 @@ function renderProfileDropdown(data) {
   dd.innerHTML = '';
   const profiles = data.profiles || [];
   const active = data.active || 'default';
+  // Build employee name lookup
+  const empNames = {};
+  if (typeof EMPLOYEE !== 'undefined' && EMPLOYEE.employees) {
+    EMPLOYEE.employees.forEach(e => { if (e.profile_name) empNames[e.profile_name] = e.name; });
+  }
   for (const p of profiles) {
     const opt = document.createElement('div');
     opt.className = 'profile-opt' + (p.name === active ? ' active' : '');
@@ -847,7 +857,8 @@ function renderProfileDropdown(data) {
     if (p.skill_count) meta.push(p.skill_count + ' skills');
     const gwDot = `<span class="profile-opt-badge ${p.gateway_running ? 'running' : 'stopped'}"></span>`;
     const checkmark = p.name === active ? ' <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--link)" stroke-width="3" style="vertical-align:-1px"><polyline points="20 6 9 17 4 12"/></svg>' : '';
-    opt.innerHTML = `<div class="profile-opt-name">${gwDot}${esc(p.name)}${p.is_default ? ' <span style="opacity:.5;font-weight:400">(default)</span>' : ''}${checkmark}</div>` +
+    const displayName = empNames[p.name] || p.name;
+    opt.innerHTML = `<div class="profile-opt-name">${gwDot}${esc(displayName)}${p.is_default ? ' <span style="opacity:.5;font-weight:400">(default)</span>' : ''}${checkmark}</div>` +
       (meta.length ? `<div class="profile-opt-meta">${esc(meta.join(' \u00b7 '))}</div>` : '');
     opt.onclick = async () => {
       closeProfileDropdown();
