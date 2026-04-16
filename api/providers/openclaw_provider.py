@@ -201,6 +201,13 @@ class OpenClawAgent(IAgent):
     def run(self, user_message, system_message, conversation_history,
             session_id, personality=None):
 
+        # Strip [Workspace: ...] prefix for display, keep for agent
+        display_message = user_message
+        if display_message.startswith('[Workspace:'):
+            newline_idx = display_message.find('\n')
+            if newline_idx >= 0:
+                display_message = display_message[newline_idx + 1:]
+
         full_message = user_message
         if personality:
             full_message = personality + '\n\n' + user_message
@@ -284,9 +291,9 @@ class OpenClawAgent(IAgent):
 
         self._usage = usage
 
-        # Build messages list
+        # Build messages list — use display_message (without workspace prefix) for storage
         messages = list(conversation_history) if conversation_history else []
-        messages.append({'role': 'user', 'content': user_message})
+        messages.append({'role': 'user', 'content': display_message})
         if result_text:
             messages.append({'role': 'assistant', 'content': result_text})
 
