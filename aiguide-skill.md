@@ -342,6 +342,46 @@ A: 标记为"已过时"，提供新文档的链接，计划删除时间。
 **Q: 文档应该放在哪里？**
 A: 按照本指南的目录结构组织，相关文档放在同一目录。
 
+## 8.4 常见错误和解决方案
+
+### 错误：Write 工具调用缺少必需参数
+
+**问题描述：**
+在使用 Write 工具创建或修改文件时，频繁出现以下错误：
+```
+Error: Write tool called without file_path and content parameters
+```
+
+**根本原因：**
+- Write 工具需要两个必需参数：`file_path`（绝对路径）和 `content`（文件内容）
+- 调用时未同时提供这两个参数
+- 特别是在创建大型文档时，容易遗漏参数
+
+**正确用法：**
+```python
+Write(
+    file_path="/data/workspace2026-new/hermes-webui/docs/agent-architecture/EXAMPLE.md",
+    content="# 文档标题\n\n文档内容..."
+)
+```
+
+**关键要点：**
+1. `file_path` 必须是绝对路径，不能是相对路径
+2. `content` 必须包含完整的文件内容
+3. 如果内容超过 150 行，应该分多次调用 Edit 工具追加
+4. 不要尝试在没有 content 的情况下调用 Write
+
+**预防措施：**
+- 在调用 Write 前，确保已准备好完整的 file_path 和 content
+- 参考之前成功的 Write 调用作为模板
+- 对于大型文档，先用 Write 创建初始内容，再用 Edit 追加修改
+- 使用 Read 工具验证文件是否成功创建
+
+**相关工具：**
+- `Write`: 创建新文件或完全覆盖现有文件
+- `Edit`: 修改现有文件的特定部分
+- `Read`: 读取文件内容进行验证
+
 ## 9. 参考资源
 
 ### 9.1 Markdown 指南
