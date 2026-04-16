@@ -167,6 +167,12 @@ def create_employee(body):
             _update_profile_toolsets(profile_name, capabilities)
         except Exception:
             pass
+    elif emp['agent_provider'] == 'openclaw':
+        try:
+            from api.providers.openclaw_provider import create_openclaw_agent_on_gateway
+            create_openclaw_agent_on_gateway(profile_name, name, description, traits, capabilities)
+        except Exception as e:
+            print(f'[employees] OpenClaw agent creation failed: {e}', flush=True)
 
     data['employees'].append(emp)
     _save_employees(data)
@@ -234,6 +240,14 @@ def delete_employee(emp_id):
                     delete_profile_api(profile_name)
                 except Exception:
                     pass
+        elif target_emp and target_emp.get('agent_provider') == 'openclaw':
+            profile_name = target_emp.get('profile_name')
+            if profile_name:
+                try:
+                    from api.providers.openclaw_provider import delete_openclaw_agent_on_gateway
+                    delete_openclaw_agent_on_gateway(profile_name)
+                except Exception as e:
+                    print(f'[employees] OpenClaw agent deletion failed: {e}', flush=True)
         return True
     return False
 

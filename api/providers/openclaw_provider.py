@@ -39,6 +39,71 @@ def _get_openclaw_config() -> dict:
     }
 
 
+def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabilities):
+    """Create a new agent on the OpenClaw Gateway."""
+    import asyncio
+
+    cfg = _get_openclaw_config()
+
+    # Build system prompt from employee data
+    lines = [f'你是 {name}，{description}'] if description else [f'你是 {name}']
+    if traits:
+        lines.append('\n性格特质:')
+        for t in traits:
+            lines.append(f'- {t}')
+    system_prompt = '\n'.join(lines)
+
+    async def _create():
+        from openclaw_sdk import OpenClawClient, AgentConfig
+        client = await OpenClawClient.connect(
+            gateway_ws_url=cfg['gateway_url'],
+            api_key=cfg['api_key'] or None,
+        )
+        try:
+            config = AgentConfig(
+                agent_id=agent_id,
+                name=agent_id,  # Gateway agent name must be ASCII-safe
+                system_prompt=system_prompt,
+            )
+            result = client.create_agent(config)
+            if asyncio.iscoroutine(result):
+                result = await result
+            return {'agent_id': agent_id, 'created': True}
+        finally:
+            if asyncio.iscoroutinefunction(client.close):
+                await client.close()
+            else:
+                client.close()
+
+    return asyncio.run(_create())
+
+
+def delete_openclaw_agent_on_gateway(agent_id):
+    """Delete an agent from the OpenClaw Gateway."""
+    import asyncio
+
+    cfg = _get_openclaw_config()
+
+    async def _delete():
+        from openclaw_sdk import OpenClawClient
+        client = await OpenClawClient.connect(
+            gateway_ws_url=cfg['gateway_url'],
+            api_key=cfg['api_key'] or None,
+        )
+        try:
+            result = client.delete_agent(agent_id)
+            if asyncio.iscoroutine(result):
+                result = await result
+            return result
+        finally:
+            if asyncio.iscoroutinefunction(client.close):
+                await client.close()
+            else:
+                client.close()
+
+    return asyncio.run(_delete())
+
+
 class OpenClawProvider(IAgentProvider):
 
     def get_provider_id(self) -> str:
@@ -92,8 +157,24 @@ class OpenClawProvider(IAgentProvider):
                      on_tool: Callable[[str, str, dict], None],
                      ) -> 'OpenClawAgent':
         cfg = _get_openclaw_config()
+        # For OpenClaw, resolve the agent_id from the session's employee profile
+        # The model param is the LLM model name, but we need the OpenClaw agent_id
+        openclaw_agent_id = model  # default: use model as agent_id
+        try:
+            from api.employees import list_employees
+            from api.models import get_session
+            s = get_session(session_id)
+            if s and hasattr(s, 'profile') and s.profile:
+                # Check if this profile_name exists as an OpenClaw agent
+                for emp in list_employees().get('employees', []):
+                    if emp.get('profile_name') == s.profile and emp.get('agent_provider') == 'openclaw':
+                        openclaw_agent_id = emp['profile_name']
+                        break
+        except Exception:
+            pass
         return OpenClawAgent(
             model=model,
+            openclaw_agent_id=openclaw_agent_id,
             gateway_url=cfg['gateway_url'],
             gateway_key=cfg['api_key'],
             session_id=session_id,
@@ -105,9 +186,10 @@ class OpenClawProvider(IAgentProvider):
 class OpenClawAgent(IAgent):
     """Wraps openclaw-sdk async Agent via asyncio.run()."""
 
-    def __init__(self, *, model, gateway_url, gateway_key,
+    def __init__(self, *, model, openclaw_agent_id=None, gateway_url, gateway_key,
                  session_id, on_token, on_tool):
         self._model = model
+        self._openclaw_agent_id = openclaw_agent_id or model
         self._gateway_url = gateway_url
         self._gateway_key = gateway_key
         self._session_id = session_id
@@ -135,7 +217,7 @@ class OpenClawAgent(IAgent):
                 api_key=self._gateway_key or None,
             )
             try:
-                agent = client.get_agent(self._model)
+                agent = client.get_agent(self._openclaw_agent_id)
 
                 stream = await agent.execute_stream(full_message)
                 async for event in stream:
