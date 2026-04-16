@@ -754,9 +754,16 @@ function syncTopbar(){
   if(typeof _syncHermesPanelSessionActions==='function') _syncHermesPanelSessionActions();
   if(typeof syncWorkspaceDisplays==='function') syncWorkspaceDisplays();
   // modelSelect already set above
-  // Update profile chip label
+  // Update profile chip label with employee name
   const profileLabel=$('profileChipLabel');
-  if(profileLabel) profileLabel.textContent=S.activeProfile||'default';
+  if(profileLabel){
+    let displayName='default';
+    if(typeof EMPLOYEE!=='undefined'&&EMPLOYEE.active){
+      const activeEmp=EMPLOYEE.employees.find(e=>e.id===EMPLOYEE.active);
+      if(activeEmp) displayName=activeEmp.name||'default';
+    }
+    profileLabel.textContent=displayName;
+  }
   // JDUI topbar override
   if(typeof _isJduiTheme==='function'&&_isJduiTheme()) _syncJduiTopbar();
 }

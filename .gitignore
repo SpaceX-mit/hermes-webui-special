@@ -27,4 +27,4 @@ full-UI.png
 Thumbs.db
 
 # Local reference clones — never committed
-docs/
+# docs/  # Commented out to allow architecture documentation

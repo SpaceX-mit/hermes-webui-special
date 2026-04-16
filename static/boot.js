@@ -505,7 +505,7 @@ function _jduiNavActivate(btn){
   }
   // Fetch active profile
   try{const p=await api('/api/profile/active');S.activeProfile=p.name||'default';}catch(e){S.activeProfile='default';}
-  // Update profile chip label immediately
+  // Update profile chip label immediately (will be updated again after employees load)
   const profileLabel=$('profileChipLabel');
   if(profileLabel) profileLabel.textContent=S.activeProfile||'default';
   // Fetch available models from server and populate dropdown dynamically
@@ -523,6 +523,11 @@ function _jduiNavActivate(btn){
   _applyJduiLayout();
   if(typeof _restoreActiveEmployee==='function') _restoreActiveEmployee();
   if(typeof _loadEmployees==='function') await _loadEmployees();
+  // Update profile chip label with employee name after employees are loaded
+  if(profileLabel && typeof EMPLOYEE!=='undefined'&&EMPLOYEE.active){
+    const activeEmp=EMPLOYEE.employees.find(e=>e.id===EMPLOYEE.active);
+    if(activeEmp) profileLabel.textContent=activeEmp.name||'default';
+  }
   _initResizePanels();
   // Restore workspace panel open/closed state from last visit
   if(localStorage.getItem('hermes-webui-workspace-panel')==='open'){
