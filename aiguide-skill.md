@@ -279,6 +279,9 @@ python3 -m http.server 8000
   - [x] EMPLOYEE_AGENT_MAPPING.md - 主要分析文档
   - [x] PROVIDER_IMPLEMENTATION.md - 技术细节文档
   - [x] README.md - 索引和导航
+  - [x] EMPLOYEE_CREATION_FLOW.md - 数字员工创建流程与Agent对齐机制
+  - [x] OPENCLAW_FLOW.md - OpenClaw 数字员工与会话完整流程
+  - [x] HERMES_FLOW.md - Hermes Agent 数字员工创建与对话完整流程
 
 ### 7.2 进行中
 
