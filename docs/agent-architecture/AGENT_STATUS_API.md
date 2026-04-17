@@ -230,6 +230,85 @@ agent 结束（finally 块）
 
 ---
 
+## 测试页面
+
+### 访问地址
+
+```
+http://localhost:8787/static/agent-status-test.html
+```
+
+页面文件：`static/agent-status-test.html`
+
+---
+
+### 总览面板
+
+页面打开时自动并行请求三个接口，结果展示在三个 tab 中：
+
+```javascript
+const [empRes, sessRes, statusRes] = await Promise.all([
+  fetch('/api/employees'),    // 数字员工列表
+  fetch('/api/sessions'),     // 所有会话
+  fetch('/api/agent/status'), // 活跃 agent
+]);
+```
+
+**数字员工 tab** — 来源 `GET /api/employees`
+
+显示每个员工的 `agent_provider`（Hermes/OpenClaw）、`profile_name`、能力配置，以及是否有活跃 stream 正在为其服务。
+
+**会话列表 tab** — 来源 `GET /api/sessions`
+
+| 列 | 数据来源 |
+|----|---------|
+| Session ID | `session.session_id` |
+| Agent Provider | `session.profile` → 查 `/api/employees` → `employee.agent_provider` |
+| 员工 | `session.profile` → `employee.name` |
+| Model | `session.model` |
+| 状态 | `session.session_id` 是否在 `/api/agent/status` 的活跃列表中 |
+
+点击任意行展开 Session 详情，每个字段旁标注数据来源，例如：
+
+```
+model        claude-sonnet-4-6    [session.model → POST /api/chat/start { model }]
+profile      emp-a1b2c3d4e5f6     [session.profile = employee.profile_name]
+agent_provider  hermes            [employee.agent_provider (via session.profile → /api/employees)]
+```
+
+详情面板底部提供快捷操作：
+- **用此 session_id 查询 Agent 状态** — 自动填入下方查询框并执行
+- **复制 chat/start 参数** — 复制 `{ session_id, model, workspace, profile }` JSON，可直接用于 `POST /api/chat/start` 测试
+
+**活跃 Stream tab** — 来源 `GET /api/agent/status`
+
+列出所有运行中的 stream，点击 stream_id 或 session_id 可跳转到下方查询框。
+
+---
+
+### Agent 状态查询
+
+```
+GET /api/agent/status
+GET /api/agent/status?stream_id=<stream_id>
+GET /api/agent/status?session_id=<session_id>
+```
+
+支持自动刷新（可设间隔秒数），结果以卡片形式展示，Hermes 和 OpenClaw 显示各自的状态字段。
+
+---
+
+### 已知问题与修复记录
+
+**`/api/sessions` 返回 500 — UnboundLocalError**
+
+- **原因：** `routes.py` 的 `/api/employee/sessions` 处理块中使用了 `all_sessions = []` 作为局部变量，与顶部 import 的 `all_sessions()` 函数同名。Python 将整个 `handle_get` 函数作用域内的 `all_sessions` 都视为局部变量，导致第 325 行调用 `all_sessions()` 时报 `UnboundLocalError`。
+- **修复：** 将局部变量重命名为 `emp_sessions`（`api/routes.py:583`）。
+- **commit：** `37453c0`
+
+---
+
 ## 版本历史
 
+- **v1.1** (2026-04-17) - 新增测试页面文档、使用说明、已知问题记录
 - **v1.0** (2026-04-17) - 初始版本，支持 Hermes 和 OpenClaw 状态查询
