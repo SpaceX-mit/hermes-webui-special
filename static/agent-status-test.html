@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Status API 测试</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+  .card { background: #1e2130; border: 1px solid #2d3148; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px; }
+  input[type=text] {
+    background: #0f1117; border: 1px solid #2d3148; border-radius: 6px;
+    color: #e2e8f0; font-size: 13px; padding: 7px 10px; width: 260px; outline: none;
+  }
+  input[type=text]:focus { border-color: #6366f1; }
+  input[type=number] {
+    background: #0f1117; border: 1px solid #2d3148; border-radius: 6px;
+    color: #e2e8f0; font-size: 13px; padding: 7px 10px; width: 90px; outline: none;
+  }
+  button {
+    background: #6366f1; color: #fff; border: none; border-radius: 6px;
+    font-size: 13px; font-weight: 500; padding: 8px 16px; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { background: #4f46e5; }
+  button.secondary { background: #2d3148; color: #94a3b8; }
+  button.secondary:hover { background: #374151; color: #e2e8f0; }
+  button.danger { background: #7f1d1d; color: #fca5a5; }
+  button.danger:hover { background: #991b1b; }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .badge-running { background: #14532d; color: #86efac; }
+  .badge-idle    { background: #1e2130; color: #64748b; border: 1px solid #2d3148; }
+  .badge-hermes  { background: #1e3a5f; color: #93c5fd; }
+  .badge-openclaw{ background: #3b1f5e; color: #c4b5fd; }
+  .status-bar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: #0f1117; border-radius: 6px; margin-bottom: 12px; font-size: 13px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
+  .dot.active { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+  .agent-card {
+    background: #0f1117; border: 1px solid #2d3148; border-radius: 8px;
+    padding: 16px; margin-bottom: 10px;
+  }
+  .agent-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .agent-header .stream-id { font-size: 12px; color: #64748b; font-family: monospace; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .stat { background: #1e2130; border-radius: 6px; padding: 10px 12px; }
+  .stat-label { font-size: 11px; color: #64748b; margin-bottom: 3px; }
+  .stat-value { font-size: 16px; font-weight: 600; color: #f1f5f9; font-family: monospace; }
+  .stat-value.highlight { color: #86efac; }
+  .empty-state { text-align: center; padding: 32px; color: #475569; font-size: 14px; }
+  pre {
+    background: #0f1117; border: 1px solid #2d3148; border-radius: 6px;
+    padding: 14px; font-size: 12px; color: #94a3b8; overflow-x: auto;
+    white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .auto-row { display: flex; align-items: center; gap: 10px; }
+  .toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0; background: #2d3148;
+    border-radius: 20px; transition: .2s;
+  }
+  .slider:before {
+    content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px;
+    background: #64748b; border-radius: 50%; transition: .2s;
+  }
+  input:checked + .slider { background: #4f46e5; }
+  input:checked + .slider:before { transform: translateX(16px); background: #fff; }
+  .log { font-size: 11px; color: #475569; margin-top: 8px; max-height: 80px; overflow-y: auto; }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid #1e2130; }
+  .log-entry.ok { color: #86efac; }
+  .log-entry.err { color: #fca5a5; }
+  .section-sep { border: none; border-top: 1px solid #2d3148; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<h1>Agent Status API 测试</h1>
+<p class="subtitle">GET /api/agent/status — 实时查询活跃 Agent 运行状态</p>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="dot" id="connDot"></div>
+  <span id="connText" style="color:#64748b">未连接</span>
+  <span style="margin-left:auto;font-size:11px;color:#475569" id="lastUpdate"></span>
+</div>
+
+<!-- Query controls -->
+<div class="card">
+  <div class="card-title">查询参数</div>
+  <div class="row">
+    <div>
+      <label>stream_id（可选）</label>
+      <input type="text" id="filterStream" placeholder="留空查询所有">
+    </div>
+    <div>
+      <label>session_id（可选）</label>
+      <input type="text" id="filterSession" placeholder="留空查询所有">
+    </div>
+    <button onclick="fetchStatus()">查询</button>
+    <button class="secondary" onclick="clearFilters()">清空筛选</button>
+  </div>
+  <hr class="section-sep">
+  <div class="auto-row">
+    <label class="toggle">
+      <input type="checkbox" id="autoRefresh" onchange="toggleAuto()">
+      <span class="slider"></span>
+    </label>
+    <span style="font-size:13px;color:#94a3b8">自动刷新</span>
+    <div>
+      <label style="display:inline;margin-right:6px">间隔（秒）</label>
+      <input type="number" id="interval" value="2" min="1" max="60">
+    </div>
+  </div>
+  <div class="log" id="queryLog"></div>
+</div>
+
+<!-- Results: visual -->
+<div class="card">
+  <div class="card-title">活跃 Agent <span id="countBadge" style="font-size:12px;color:#64748b;font-weight:400"></span></div>
+  <div id="agentList"><div class="empty-state">点击"查询"获取数据</div></div>
+</div>
+
+<!-- Results: raw JSON -->
+<div class="card">
+  <div class="card-title" style="display:flex;justify-content:space-between">
+    原始响应
+    <button class="secondary" style="padding:3px 10px;font-size:11px" onclick="copyRaw()">复制</button>
+  </div>
+  <pre id="rawJson">—</pre>
+</div>
+
+<script>
+let _timer = null;
+
+function buildUrl() {
+  const s = document.getElementById('filterStream').value.trim();
+  const sess = document.getElementById('filterSession').value.trim();
+  let url = '/api/agent/status';
+  const params = [];
+  if (s) params.push('stream_id=' + encodeURIComponent(s));
+  if (sess) params.push('session_id=' + encodeURIComponent(sess));
+  if (params.length) url += '?' + params.join('&');
+  return url;
+}
+
+async function fetchStatus() {
+  const url = buildUrl();
+  const dot = document.getElementById('connDot');
+  const connText = document.getElementById('connText');
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    dot.className = 'dot active';
+    connText.textContent = '已连接';
+    connText.style.color = '#86efac';
+    document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString();
+    renderAgents(data);
+    document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
+    addLog('ok', `${url} → ${res.status} (${data.count} agents)`);
+  } catch (e) {
+    dot.className = 'dot';
+    connText.textContent = '连接失败';
+    connText.style.color = '#fca5a5';
+    document.getElementById('rawJson').textContent = String(e);
+    addLog('err', String(e));
+  }
+}
+
+function renderAgents(data) {
+  const list = document.getElementById('agentList');
+  const count = data.count || 0;
+  document.getElementById('countBadge').textContent = count > 0 ? `(${count} 个运行中)` : '(无)';
+
+  if (!count) {
+    list.innerHTML = '<div class="empty-state">当前没有活跃的 Agent</div>';
+    return;
+  }
+
+  list.innerHTML = data.agents.map(a => {
+    const providerBadge = a.provider === 'hermes'
+      ? '<span class="badge badge-hermes">Hermes</span>'
+      : '<span class="badge badge-openclaw">OpenClaw</span>';
+
+    const stats = buildStats(a);
+    return `
+      <div class="agent-card">
+        <div class="agent-header">
+          <span class="badge badge-running">running</span>
+          ${providerBadge}
+          <span style="font-size:13px;font-weight:600;color:#f1f5f9">${escHtml(a.model || '—')}</span>
+          <span class="stream-id">stream: ${escHtml(a.stream_id || '—')}</span>
+        </div>
+        <div class="stats-grid">${stats}</div>
+      </div>`;
+  }).join('');
+}
+
+function buildStats(a) {
+  const s = a.agent_status || {};
+  const elapsed = a.elapsed_seconds != null ? a.elapsed_seconds + 's' : '—';
+  const sessionId = a.session_id ? a.session_id.slice(0, 12) + '…' : '—';
+
+  const common = [
+    stat('运行时长', elapsed, true),
+    stat('Session', sessionId),
+  ];
+
+  if (a.provider === 'hermes') {
+    return [...common,
+      stat('输入 Token', fmt(s.input_tokens)),
+      stat('输出 Token', fmt(s.output_tokens)),
+      stat('预估费用', s.estimated_cost_usd != null ? '$' + s.estimated_cost_usd.toFixed(4) : '—'),
+      stat('上下文长度', fmt(s.context_length)),
+      stat('压缩次数', fmt(s.compression_count)),
+      stat('最近 Prompt', fmt(s.last_prompt_tokens)),
+    ].join('');
+  } else {
+    return [...common,
+      stat('Agent ID', s.openclaw_agent_id || '—'),
+      stat('Gateway', s.gateway_url || '—'),
+      stat('已中断', s.interrupted ? '是' : '否'),
+      stat('输入 Token', fmt(s.input_tokens)),
+      stat('输出 Token', fmt(s.output_tokens)),
+    ].join('');
+  }
+}
+
+function stat(label, value, highlight) {
+  return `<div class="stat">
+    <div class="stat-label">${label}</div>
+    <div class="stat-value${highlight ? ' highlight' : ''}">${escHtml(String(value ?? '—'))}</div>
+  </div>`;
+}
+
+function fmt(v) { return v != null ? v.toLocaleString() : '—'; }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function addLog(type, msg) {
+  const log = document.getElementById('queryLog');
+  const el = document.createElement('div');
+  el.className = 'log-entry ' + type;
+  el.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  log.prepend(el);
+  while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+function clearFilters() {
+  document.getElementById('filterStream').value = '';
+  document.getElementById('filterSession').value = '';
+}
+
+function toggleAuto() {
+  const on = document.getElementById('autoRefresh').checked;
+  if (_timer) { clearInterval(_timer); _timer = null; }
+  if (on) {
+    const sec = parseInt(document.getElementById('interval').value) || 2;
+    fetchStatus();
+    _timer = setInterval(fetchStatus, sec * 1000);
+  }
+}
+
+function copyRaw() {
+  const text = document.getElementById('rawJson').textContent;
+  navigator.clipboard.writeText(text).catch(() => {});
+}
+</script>
+</body>
+</html>
