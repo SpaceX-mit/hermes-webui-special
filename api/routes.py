@@ -641,16 +641,30 @@ def handle_post(handler, parsed) -> bool:
                         s.profile = _emp.get('profile_name', s.profile)
                         if hasattr(s, 'employee_id'):
                             s.employee_id = _emp_id
-                        # P2: For OpenClaw employees, create a Gateway session
-                        # so multi-turn context is managed by the Gateway.
+                        # P2: For OpenClaw employees, create a Gateway session in the
+                        # background so it doesn't block the HTTP response.
                         if _emp.get('agent_provider') == 'openclaw':
-                            try:
-                                from api.providers.openclaw_provider import create_gateway_session
-                                gw_key = create_gateway_session(_emp['profile_name'], s.session_id)
-                                s.openclaw_session_key = gw_key
-                                print(f'[session] Gateway session created: {gw_key}', flush=True)
-                            except Exception as _gw_err:
-                                print(f'[session] Gateway session creation failed: {_gw_err}', flush=True)
+                            _profile_name = _emp['profile_name']
+                            _session_id = s.session_id
+                            def _bg_create_gw_session(profile_name, session_id):
+                                try:
+                                    from api.providers.openclaw_provider import create_gateway_session
+                                    from api.models import get_session
+                                    gw_key = create_gateway_session(profile_name, session_id)
+                                    # Update the session on disk once the key is ready
+                                    _s = get_session(session_id)
+                                    if _s:
+                                        _s.openclaw_session_key = gw_key
+                                        _s.save()
+                                    print(f'[session] Gateway session created: {gw_key}', flush=True)
+                                except Exception as _e:
+                                    print(f'[session] Gateway session creation failed: {_e}', flush=True)
+                            import threading as _threading
+                            _threading.Thread(
+                                target=_bg_create_gw_session,
+                                args=(_profile_name, _session_id),
+                                daemon=True,
+                            ).start()
                         s.save()
                         break
             except Exception:

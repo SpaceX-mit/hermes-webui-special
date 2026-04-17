@@ -168,11 +168,20 @@ def create_employee(body):
         except Exception:
             pass
     elif emp['agent_provider'] == 'openclaw':
-        try:
-            from api.providers.openclaw_provider import create_openclaw_agent_on_gateway
-            create_openclaw_agent_on_gateway(profile_name, name, description, traits, capabilities)
-        except Exception as e:
-            print(f'[employees] OpenClaw agent creation failed: {e}', flush=True)
+        # Run in background thread — Gateway connection can be slow and
+        # should not block the employee creation HTTP response.
+        import threading as _threading
+        def _bg_create(pname, n, d, t, c):
+            try:
+                from api.providers.openclaw_provider import create_openclaw_agent_on_gateway
+                create_openclaw_agent_on_gateway(pname, n, d, t, c)
+            except Exception as e:
+                print(f'[employees] OpenClaw agent creation failed: {e}', flush=True)
+        _threading.Thread(
+            target=_bg_create,
+            args=(profile_name, name, description, traits, capabilities),
+            daemon=True,
+        ).start()
 
     data['employees'].append(emp)
     _save_employees(data)
@@ -216,17 +225,23 @@ def update_employee(emp_id, body):
                         pass
             elif emp.get('agent_provider') == 'openclaw':
                 if soul_changed or caps_changed:
-                    try:
-                        from api.providers.openclaw_provider import update_openclaw_agent_on_gateway
-                        update_openclaw_agent_on_gateway(
-                            emp['profile_name'],
-                            emp['name'],
-                            emp.get('description', ''),
-                            emp.get('traits', []),
-                            emp.get('capabilities', {}),
-                        )
-                    except Exception as e:
-                        print(f'[employees] OpenClaw agent update failed: {e}', flush=True)
+                    import threading as _threading
+                    _pname = emp['profile_name']
+                    _name = emp['name']
+                    _desc = emp.get('description', '')
+                    _traits = emp.get('traits', [])
+                    _caps = emp.get('capabilities', {})
+                    def _bg_update(pname, n, d, t, c):
+                        try:
+                            from api.providers.openclaw_provider import update_openclaw_agent_on_gateway
+                            update_openclaw_agent_on_gateway(pname, n, d, t, c)
+                        except Exception as e:
+                            print(f'[employees] OpenClaw agent update failed: {e}', flush=True)
+                    _threading.Thread(
+                        target=_bg_update,
+                        args=(_pname, _name, _desc, _traits, _caps),
+                        daemon=True,
+                    ).start()
 
             return emp
     return None
