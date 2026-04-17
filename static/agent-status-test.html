@@ -207,12 +207,24 @@ let _currentTab = 'employees';
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 async function loadOverview() {
+  const sessTab = document.getElementById('tabSessions');
+  sessTab.innerHTML = '<div style="padding:12px;color:#475569;font-size:13px">加载中...</div>';
   try {
     const [empRes, sessRes, statusRes] = await Promise.all([
       fetch('/api/employees'),
       fetch('/api/sessions'),
       fetch('/api/agent/status'),
     ]);
+
+    // Debug: show raw status if not OK
+    if (!sessRes.ok) {
+      sessTab.innerHTML = `<div style="padding:12px;color:#fca5a5;font-size:13px">
+        /api/sessions 返回 ${sessRes.status}，可能需要登录或服务未启动。
+      </div>`;
+      setConn(false);
+      return;
+    }
+
     const empData  = await empRes.json();
     const sessData = await sessRes.json();
     const statusData = await statusRes.json();
@@ -225,8 +237,10 @@ async function loadOverview() {
     renderSessions(sessData.sessions || [], statusData);
     renderStreams(statusData);
     setConn(true);
+    addLog('ok', `总览加载完成：${emps.length} 员工，${(sessData.sessions||[]).length} 会话，${(statusData.agents||[]).length} 活跃 stream`);
   } catch(e) {
     setConn(false);
+    sessTab.innerHTML = `<div style="padding:12px;color:#fca5a5;font-size:13px">加载失败: ${escHtml(String(e))}</div>`;
     addLog('err', 'loadOverview: ' + e);
   }
 }
@@ -264,7 +278,16 @@ function renderEmployees(emps, statusData) {
 
 function renderSessions(sessions, statusData) {
   const el = document.getElementById('tabSessions');
-  if (!sessions.length) { el.innerHTML = '<div class="empty-state">暂无会话</div>'; return; }
+  if (!sessions.length) {
+    el.innerHTML = `<div class="empty-state">
+      暂无会话<br>
+      <span style="font-size:12px;color:#475569;margin-top:6px;display:block">
+        数据来源：GET /api/sessions → sessions[]<br>
+        存储路径：~/.hermes/webui/sessions/*.json
+      </span>
+    </div>`;
+    return;
+  }
 
   const activeStreamSids = new Set((statusData.agents || []).map(a => a.session_id));
 
