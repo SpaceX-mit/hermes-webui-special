@@ -580,11 +580,11 @@ def handle_get(handler, parsed) -> bool:
         if not emp:
             return j(handler, {"error": "employee not found"}, status=404)
         profile_name = emp.get("profile_name", "")
-        all_sessions = []
+        emp_sessions = []
         with LOCK:
             for sid, s in SESSIONS.items():
                 if getattr(s, "profile", None) == profile_name:
-                    all_sessions.append(s.compact())
+                    emp_sessions.append(s.compact())
         # Also scan disk for sessions not in cache
         import glob as _glob
         for f in _glob.glob(str(SESSION_DIR / "*.json")):
@@ -595,16 +595,16 @@ def handle_get(handler, parsed) -> bool:
                 sd = _json.loads(open(f).read())
                 if sd.get("profile") == profile_name:
                     sid = sd.get("session_id")
-                    if not any(s.get("session_id") == sid for s in all_sessions):
-                        all_sessions.append(sd)
+                    if not any(s.get("session_id") == sid for s in emp_sessions):
+                        emp_sessions.append(sd)
             except Exception:
                 pass
-        all_sessions.sort(key=lambda s: s.get("updated_at", 0), reverse=True)
+        emp_sessions.sort(key=lambda s: s.get("updated_at", 0), reverse=True)
         return j(handler, {
             "employee_id": emp_id,
             "employee_name": emp.get("name", ""),
             "agent_provider": emp.get("agent_provider", "hermes"),
-            "sessions": all_sessions,
+            "sessions": emp_sessions,
             "count": len(all_sessions),
         })
 
