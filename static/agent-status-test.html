@@ -102,6 +102,26 @@
          color: #64748b; background: transparent; border: none; }
   .tab.active { background: #2d3148; color: #e2e8f0; }
   .tab:hover:not(.active) { color: #94a3b8; }
+  /* Session detail panel */
+  .sess-detail { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 16px; margin-top: 12px; }
+  .sess-detail-title { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .field-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; font-size: 13px; }
+  .field-key { color: #64748b; min-width: 120px; font-size: 12px; flex-shrink: 0; }
+  .field-val { color: #e2e8f0; font-family: monospace; font-size: 12px; word-break: break-all; }
+  .field-val.copy-btn { cursor: pointer; color: #818cf8; }
+  .field-val.copy-btn:hover { color: #a5b4fc; }
+  .source-tag { font-size: 10px; color: #475569; background: #1e2130; border: 1px solid #2d3148; border-radius: 4px; padding: 1px 5px; margin-left: 6px; font-family: monospace; }
+  .msg-preview { max-height: 160px; overflow-y: auto; margin-top: 8px; }
+  .msg-row { padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; font-size: 12px; line-height: 1.5; }
+  .msg-row.user { background: #1e2130; color: #93c5fd; }
+  .msg-row.assistant { background: #14532d22; color: #86efac; }
+  .msg-role { font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.6; margin-bottom: 2px; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+  .filter-row input { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; font-size: 12px; padding: 5px 9px; outline: none; width: 200px; }
+  .filter-row input:focus { border-color: #6366f1; }
+  .filter-row select { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; font-size: 12px; padding: 5px 9px; outline: none; }
+  .copy-toast { position: fixed; bottom: 24px; right: 24px; background: #22c55e; color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .copy-toast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -131,6 +151,8 @@
   <div id="tabSessions" style="display:none"><div class="empty-state">点击"刷新总览"加载</div></div>
   <div id="tabStreams" style="display:none"><div class="empty-state">点击"刷新总览"加载</div></div>
 </div>
+
+<div id="copyToast" class="copy-toast">已复制</div>
 
 <!-- Query controls -->
 <div class="card" id="queryCard">
@@ -246,28 +268,193 @@ function renderSessions(sessions, statusData) {
 
   const activeStreamSids = new Set((statusData.agents || []).map(a => a.session_id));
 
-  el.innerHTML = `<table>
-    <thead><tr>
-      <th>Session ID</th><th>Agent Provider</th><th>员工</th><th>Model</th><th>状态</th><th>更新时间</th>
-    </tr></thead>
-    <tbody>${sessions.slice(0, 50).map(s => {
-      const emp = _empMap[s.profile] || null;
-      const provider = emp ? (emp.agent_provider || 'hermes') : (s.profile ? 'hermes' : '—');
-      const empName = emp ? emp.name : (s.profile || '—');
-      const isActive = activeStreamSids.has(s.session_id);
-      const updated = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString() : '—';
-      return `<tr>
-        <td class="mono clickable" onclick="fillSession('${escHtml(s.session_id)}')">${escHtml((s.session_id||'').slice(0,16))}…</td>
-        <td>${provider !== '—' ? `<span class="pill pill-${provider}">${provider}</span>` : '<span style="color:#475569">—</span>'}</td>
-        <td style="font-size:12px">${escHtml(empName)}</td>
-        <td class="mono" style="font-size:11px">${escHtml((s.model||'—').slice(0,24))}</td>
-        <td>${isActive
-          ? '<span class="pill pill-active">运行中</span>'
-          : '<span class="pill pill-idle">空闲</span>'}</td>
-        <td style="font-size:11px;color:#475569">${updated}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  // Filter controls
+  const filterHtml = `
+    <div class="filter-row">
+      <input id="sessSearch" placeholder="搜索 session_id / 标题 / 员工..." oninput="filterSessions()" style="width:240px">
+      <select id="sessProviderFilter" onchange="filterSessions()">
+        <option value="">全部 Provider</option>
+        <option value="hermes">Hermes</option>
+        <option value="openclaw">OpenClaw</option>
+      </select>
+      <select id="sessStatusFilter" onchange="filterSessions()">
+        <option value="">全部状态</option>
+        <option value="active">运行中</option>
+        <option value="idle">空闲</option>
+      </select>
+      <span id="sessCount" style="font-size:12px;color:#475569;margin-left:4px"></span>
+    </div>`;
+
+  const rows = sessions.map(s => {
+    const emp = _empMap[s.profile] || null;
+    const provider = emp ? (emp.agent_provider || 'hermes') : (s.profile ? 'hermes' : '');
+    const empName = emp ? emp.name : '';
+    const isActive = activeStreamSids.has(s.session_id);
+    const updated = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString() : '—';
+    const msgCount = (s.messages || []).length || s.message_count || 0;
+    return { s, emp, provider, empName, isActive, updated, msgCount };
+  });
+
+  // Store for filtering
+  window._sessRows = rows;
+
+  el.innerHTML = filterHtml + `
+    <table id="sessTable">
+      <thead><tr>
+        <th>Session ID <span class="source-tag">session_id</span></th>
+        <th>标题</th>
+        <th>Provider <span class="source-tag">employee.agent_provider</span></th>
+        <th>员工 <span class="source-tag">session.profile → employee.name</span></th>
+        <th>Model <span class="source-tag">session.model</span></th>
+        <th>消息数</th>
+        <th>状态</th>
+        <th>更新时间</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="sessTableBody"></tbody>
+    </table>
+    <div id="sessDetail"></div>`;
+
+  renderSessionRows(rows);
+}
+
+function renderSessionRows(rows) {
+  const search = (document.getElementById('sessSearch') || {}).value || '';
+  const provFilter = (document.getElementById('sessProviderFilter') || {}).value || '';
+  const statusFilter = (document.getElementById('sessStatusFilter') || {}).value || '';
+
+  const filtered = rows.filter(r => {
+    if (provFilter && r.provider !== provFilter) return false;
+    if (statusFilter === 'active' && !r.isActive) return false;
+    if (statusFilter === 'idle' && r.isActive) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (r.s.session_id||'').includes(q) ||
+             (r.s.title||'').toLowerCase().includes(q) ||
+             (r.empName||'').toLowerCase().includes(q) ||
+             (r.s.profile||'').includes(q);
+    }
+    return true;
+  });
+
+  const el = document.getElementById('sessTableBody');
+  if (!el) return;
+  const countEl = document.getElementById('sessCount');
+  if (countEl) countEl.textContent = `共 ${filtered.length} 条`;
+
+  el.innerHTML = filtered.slice(0, 60).map(({s, provider, empName, isActive, updated, msgCount}) => `
+    <tr onclick="loadSessionDetail('${escHtml(s.session_id)}')" style="cursor:pointer">
+      <td class="mono" style="color:#818cf8">${escHtml(s.session_id||'—')}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(s.title||'Untitled')}</td>
+      <td>${provider ? `<span class="pill pill-${provider}">${provider}</span>` : '<span style="color:#475569">—</span>'}</td>
+      <td style="font-size:12px">${escHtml(empName||'—')}</td>
+      <td class="mono" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((s.model||'—'))}</td>
+      <td style="text-align:center;color:#64748b">${msgCount}</td>
+      <td>${isActive ? '<span class="pill pill-active">运行中</span>' : '<span class="pill pill-idle">空闲</span>'}</td>
+      <td style="font-size:11px;color:#475569;white-space:nowrap">${updated}</td>
+      <td><button class="secondary" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();copyVal('${escHtml(s.session_id)}')">复制ID</button></td>
+    </tr>`).join('');
+}
+
+function filterSessions() {
+  if (window._sessRows) renderSessionRows(window._sessRows);
+}
+
+async function loadSessionDetail(sid) {
+  const el = document.getElementById('sessDetail');
+  el.innerHTML = '<div style="padding:12px;color:#475569;font-size:13px">加载中...</div>';
+  try {
+    const res = await fetch('/api/session?session_id=' + encodeURIComponent(sid));
+    const data = await res.json();
+    const s = data.session;
+    if (!s) { el.innerHTML = '<div style="padding:12px;color:#fca5a5;font-size:13px">加载失败</div>'; return; }
+
+    const emp = _empMap[s.profile] || null;
+    const provider = emp ? (emp.agent_provider || 'hermes') : (s.profile ? 'hermes' : '—');
+    const msgs = (s.messages || []).slice(-6);
+
+    el.innerHTML = `<div class="sess-detail">
+      <div class="sess-detail-title">
+        Session 详情
+        <button class="secondary" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('sessDetail').innerHTML=''">关闭</button>
+      </div>
+
+      <div class="field-row">
+        <span class="field-key">session_id</span>
+        <span class="field-val copy-btn" onclick="copyVal('${escHtml(s.session_id)}')">${escHtml(s.session_id)}</span>
+        <span class="source-tag">GET /api/session?session_id=</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">title</span>
+        <span class="field-val">${escHtml(s.title||'—')}</span>
+        <span class="source-tag">session.title</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">agent_provider</span>
+        <span class="field-val"><span class="pill pill-${provider}">${provider}</span></span>
+        <span class="source-tag">employee.agent_provider (via session.profile → /api/employees)</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">profile</span>
+        <span class="field-val copy-btn" onclick="copyVal('${escHtml(s.profile||'')}')">${escHtml(s.profile||'—')}</span>
+        <span class="source-tag">session.profile = employee.profile_name</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">employee_id</span>
+        <span class="field-val copy-btn" onclick="copyVal('${escHtml(emp ? emp.id : '')}')">${escHtml(emp ? emp.id : '—')}</span>
+        <span class="source-tag">employee.id (lookup by profile_name)</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">model</span>
+        <span class="field-val copy-btn" onclick="copyVal('${escHtml(s.model||'')}')">${escHtml(s.model||'—')}</span>
+        <span class="source-tag">session.model → POST /api/chat/start { model }</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">workspace</span>
+        <span class="field-val">${escHtml(s.workspace||'—')}</span>
+        <span class="source-tag">session.workspace → POST /api/chat/start { workspace }</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">personality</span>
+        <span class="field-val">${escHtml(s.personality||'—')}</span>
+        <span class="source-tag">session.personality</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">消息数</span>
+        <span class="field-val">${(s.messages||[]).length}</span>
+        <span class="source-tag">session.messages.length</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">input_tokens</span>
+        <span class="field-val">${s.input_tokens||0}</span>
+        <span class="source-tag">session.input_tokens</span>
+      </div>
+      <div class="field-row">
+        <span class="field-key">output_tokens</span>
+        <span class="field-val">${s.output_tokens||0}</span>
+        <span class="source-tag">session.output_tokens</span>
+      </div>
+
+      <div style="margin-top:12px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+        最近消息（最后 ${msgs.length} 条）
+        <span class="source-tag">session.messages[]</span>
+      </div>
+      <div class="msg-preview">
+        ${msgs.length ? msgs.map(m => `
+          <div class="msg-row ${m.role}">
+            <div class="msg-role">${escHtml(m.role)}</div>
+            ${escHtml(typeof m.content === 'string' ? m.content.slice(0,200) : JSON.stringify(m.content).slice(0,200))}${(typeof m.content === 'string' ? m.content : '').length > 200 ? '…' : ''}
+          </div>`).join('') : '<div style="color:#475569;font-size:12px">暂无消息</div>'}
+      </div>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #2d3148;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="fillSession('${escHtml(s.session_id)}')" style="font-size:12px;padding:5px 12px">用此 session_id 查询 Agent 状态</button>
+        <button class="secondary" onclick="copyVal(JSON.stringify(${JSON.stringify({session_id: s.session_id, model: s.model, workspace: s.workspace, profile: s.profile})}, null, 2))" style="font-size:12px;padding:5px 12px">复制 chat/start 参数</button>
+      </div>
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="padding:12px;color:#fca5a5;font-size:13px">${escHtml(String(e))}</div>`;
+  }
 }
 
 function renderStreams(statusData) {
@@ -416,6 +603,13 @@ function stat(label, value, highlight) {
 function fmt(v) { return v != null ? v.toLocaleString() : '—'; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function copyVal(text) {
+  navigator.clipboard.writeText(text).catch(() => {});
+  const t = document.getElementById('copyToast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
 function addLog(type, msg) {
   const log = document.getElementById('queryLog');
   const el = document.createElement('div');
@@ -441,7 +635,7 @@ function toggleAuto() {
 }
 
 function copyRaw() {
-  navigator.clipboard.writeText(document.getElementById('rawJson').textContent).catch(() => {});
+  copyVal(document.getElementById('rawJson').textContent);
 }
 
 // Auto-load overview on page open
