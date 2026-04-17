@@ -38,6 +38,7 @@ class IAgent(ABC):
             conversation_history: List[Dict],
             session_id: str,
             personality: Optional[str] = None,
+            **kwargs,
             ) -> AgentResult:
         """Execute a conversation turn. Streams via on_token/on_tool callbacks."""
 

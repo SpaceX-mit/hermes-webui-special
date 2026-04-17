@@ -641,6 +641,16 @@ def handle_post(handler, parsed) -> bool:
                         s.profile = _emp.get('profile_name', s.profile)
                         if hasattr(s, 'employee_id'):
                             s.employee_id = _emp_id
+                        # P2: For OpenClaw employees, create a Gateway session
+                        # so multi-turn context is managed by the Gateway.
+                        if _emp.get('agent_provider') == 'openclaw':
+                            try:
+                                from api.providers.openclaw_provider import create_gateway_session
+                                gw_key = create_gateway_session(_emp['profile_name'], s.session_id)
+                                s.openclaw_session_key = gw_key
+                                print(f'[session] Gateway session created: {gw_key}', flush=True)
+                            except Exception as _gw_err:
+                                print(f'[session] Gateway session creation failed: {_gw_err}', flush=True)
                         s.save()
                         break
             except Exception:

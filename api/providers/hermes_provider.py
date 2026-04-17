@@ -84,7 +84,7 @@ class HermesAgent(IAgent):
         return self._agent
 
     def run(self, user_message, system_message, conversation_history,
-            session_id, personality=None):
+            session_id, personality=None, **kwargs):
         # Personality injection (matches old streaming.py logic)
         if personality:
             self._agent.ephemeral_system_prompt = personality

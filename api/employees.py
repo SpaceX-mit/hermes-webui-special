@@ -214,6 +214,19 @@ def update_employee(emp_id, body):
                             _update_profile_toolsets(profile_name, emp.get('capabilities', {}))
                     except Exception:
                         pass
+            elif emp.get('agent_provider') == 'openclaw':
+                if soul_changed or caps_changed:
+                    try:
+                        from api.providers.openclaw_provider import update_openclaw_agent_on_gateway
+                        update_openclaw_agent_on_gateway(
+                            emp['profile_name'],
+                            emp['name'],
+                            emp.get('description', ''),
+                            emp.get('traits', []),
+                            emp.get('capabilities', {}),
+                        )
+                    except Exception as e:
+                        print(f'[employees] OpenClaw agent update failed: {e}', flush=True)
 
             return emp
     return None
