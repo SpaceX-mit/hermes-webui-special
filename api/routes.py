@@ -605,7 +605,7 @@ def handle_get(handler, parsed) -> bool:
             "employee_name": emp.get("name", ""),
             "agent_provider": emp.get("agent_provider", "hermes"),
             "sessions": emp_sessions,
-            "count": len(all_sessions),
+            "count": len(emp_sessions),
         })
 
     if parsed.path == "/api/agent/providers":
