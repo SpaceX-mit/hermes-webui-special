@@ -129,3 +129,14 @@ class HermesAgent(IAgent):
             last_prompt_tokens=getattr(cc, 'last_prompt_tokens', 0) or 0 if cc else 0,
             compression_count=getattr(cc, 'compression_count', 0) or 0 if cc else 0,
         )
+
+    def get_status(self) -> dict:
+        usage = self.get_usage()
+        return {
+            'input_tokens': usage.input_tokens,
+            'output_tokens': usage.output_tokens,
+            'estimated_cost_usd': usage.estimated_cost_usd,
+            'context_length': usage.context_length,
+            'compression_count': usage.compression_count,
+            'last_prompt_tokens': usage.last_prompt_tokens,
+        }

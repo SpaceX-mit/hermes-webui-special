@@ -25,6 +25,8 @@ from api.config import (
     STREAMS,
     STREAMS_LOCK,
     CANCEL_FLAGS,
+    AGENT_INSTANCES,
+    AGENT_META,
     SERVER_START_TIME,
     CLI_TOOLSETS,
     _INDEX_HTML_PATH,
@@ -423,6 +425,39 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/chat/stream/status":
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
         return j(handler, {"active": stream_id in STREAMS, "stream_id": stream_id})
+
+    if parsed.path == "/api/agent/status":
+        import time as _time
+        qp = parse_qs(parsed.query)
+        filter_stream = qp.get("stream_id", [""])[0]
+        filter_session = qp.get("session_id", [""])[0]
+        with STREAMS_LOCK:
+            meta_snapshot = dict(AGENT_META)
+            inst_snapshot = dict(AGENT_INSTANCES)
+        agents = []
+        for sid, meta in meta_snapshot.items():
+            if filter_stream and sid != filter_stream:
+                continue
+            if filter_session and meta.get('session_id') != filter_session:
+                continue
+            started = meta.get('started_at', _time.time())
+            entry = {
+                'stream_id': sid,
+                'session_id': meta.get('session_id'),
+                'provider': meta.get('provider'),
+                'model': meta.get('model'),
+                'status': 'running',
+                'started_at': started,
+                'elapsed_seconds': round(_time.time() - started, 1),
+            }
+            iagent = inst_snapshot.get(sid)
+            if iagent:
+                try:
+                    entry['agent_status'] = iagent.get_status()
+                except Exception:
+                    entry['agent_status'] = {}
+            agents.append(entry)
+        return j(handler, {'agents': agents, 'count': len(agents)})
 
     if parsed.path == "/api/chat/cancel":
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]

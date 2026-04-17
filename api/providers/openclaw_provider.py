@@ -304,3 +304,12 @@ class OpenClawAgent(IAgent):
 
     def get_usage(self):
         return self._usage
+
+    def get_status(self) -> dict:
+        return {
+            'openclaw_agent_id': self._openclaw_agent_id,
+            'gateway_url': self._gateway_url,
+            'interrupted': self._interrupted,
+            'input_tokens': self._usage.input_tokens,
+            'output_tokens': self._usage.output_tokens,
+        }

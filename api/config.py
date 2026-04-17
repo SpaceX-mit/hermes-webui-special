@@ -969,6 +969,7 @@ STREAMS: dict = {}
 STREAMS_LOCK = threading.Lock()
 CANCEL_FLAGS: dict = {}
 AGENT_INSTANCES: dict = {}  # stream_id -> AIAgent instance for interrupt propagation
+AGENT_META: dict = {}  # stream_id -> {session_id, provider, model, started_at}
 SERVER_START_TIME = time.time()
 
 # ── Thread-local env context ─────────────────────────────────────────────────

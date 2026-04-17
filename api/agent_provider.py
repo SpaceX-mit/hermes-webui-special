@@ -49,6 +49,10 @@ class IAgent(ABC):
     def get_usage(self) -> AgentUsage:
         """Return usage stats after run() completes."""
 
+    def get_status(self) -> dict:
+        """Return real-time status snapshot. Override in subclasses."""
+        return {}
+
 
 class IAgentProvider(ABC):
     """Registry entry for an agent backend (Hermes, OpenClaw, etc.)."""

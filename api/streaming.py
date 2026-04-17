@@ -11,7 +11,7 @@ import traceback
 from pathlib import Path
 
 from api.config import (
-    STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, CLI_TOOLSETS,
+    STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, AGENT_META, CLI_TOOLSETS,
     LOCK, SESSIONS, SESSION_DIR,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     resolve_model_provider,
@@ -244,6 +244,12 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
             # Store agent instance for cancel/interrupt propagation
             with STREAMS_LOCK:
                 AGENT_INSTANCES[stream_id] = _iagent
+                AGENT_META[stream_id] = {
+                    'session_id': session_id,
+                    'provider': agent_provider_id or 'hermes',
+                    'model': model,
+                    'started_at': time.time(),
+                }
                 # Check if cancel was requested during agent initialization
                 if stream_id in CANCEL_FLAGS and CANCEL_FLAGS[stream_id].is_set():
                     # Cancel arrived during agent creation - interrupt immediately
@@ -530,6 +536,7 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
             STREAMS.pop(stream_id, None)
             CANCEL_FLAGS.pop(stream_id, None)
             AGENT_INSTANCES.pop(stream_id, None)  # Clean up agent instance reference
+            AGENT_META.pop(stream_id, None)  # Clean up agent metadata
 
 # ============================================================
 # SECTION: HTTP Request Handler
