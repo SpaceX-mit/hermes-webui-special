@@ -81,12 +81,33 @@
   .log-entry.ok { color: #86efac; }
   .log-entry.err { color: #fca5a5; }
   .section-sep { border: none; border-top: 1px solid #2d3148; margin: 16px 0; }
+  /* Overview table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;
+       letter-spacing: 0.05em; padding: 6px 10px; border-bottom: 1px solid #2d3148; }
+  td { padding: 8px 10px; border-bottom: 1px solid #1a1d2e; vertical-align: middle; color: #cbd5e1; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1a1d2e; }
+  td.mono { font-family: monospace; font-size: 12px; color: #94a3b8; }
+  td.clickable { cursor: pointer; color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
+  td.clickable:hover { color: #a5b4fc; }
+  .pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; font-weight: 500; }
+  .pill-hermes   { background: #1e3a5f; color: #93c5fd; }
+  .pill-openclaw { background: #3b1f5e; color: #c4b5fd; }
+  .pill-none     { background: #1e2130; color: #475569; border: 1px solid #2d3148; }
+  .pill-active   { background: #14532d; color: #86efac; }
+  .pill-idle     { background: #1e2130; color: #64748b; border: 1px solid #2d3148; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 16px; }
+  .tab { padding: 6px 14px; font-size: 13px; font-weight: 500; border-radius: 6px; cursor: pointer;
+         color: #64748b; background: transparent; border: none; }
+  .tab.active { background: #2d3148; color: #e2e8f0; }
+  .tab:hover:not(.active) { color: #94a3b8; }
 </style>
 </head>
 <body>
 
 <h1>Agent Status API 测试</h1>
-<p class="subtitle">GET /api/agent/status — 实时查询活跃 Agent 运行状态</p>
+<p class="subtitle">实时查询 Agent / Stream / Session 状态，支持 Hermes 和 OpenClaw</p>
 
 <!-- Status bar -->
 <div class="status-bar">
@@ -95,9 +116,25 @@
   <span style="margin-left:auto;font-size:11px;color:#475569" id="lastUpdate"></span>
 </div>
 
-<!-- Query controls -->
+<!-- Overview: all sessions/streams/employees -->
 <div class="card">
-  <div class="card-title">查询参数</div>
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+    总览
+    <button class="secondary" style="padding:4px 12px;font-size:12px" onclick="loadOverview()">刷新总览</button>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('employees',this)">数字员工</button>
+    <button class="tab" onclick="switchTab('sessions',this)">会话列表</button>
+    <button class="tab" onclick="switchTab('streams',this)">活跃 Stream</button>
+  </div>
+  <div id="tabEmployees"><div class="empty-state">点击"刷新总览"加载</div></div>
+  <div id="tabSessions" style="display:none"><div class="empty-state">点击"刷新总览"加载</div></div>
+  <div id="tabStreams" style="display:none"><div class="empty-state">点击"刷新总览"加载</div></div>
+</div>
+
+<!-- Query controls -->
+<div class="card" id="queryCard">
+  <div class="card-title">查询活跃 Agent 状态（/api/agent/status）</div>
   <div class="row">
     <div>
       <label>stream_id（可选）</label>
@@ -142,6 +179,143 @@
 
 <script>
 let _timer = null;
+let _empMap = {};   // profile_name -> employee
+let _currentTab = 'employees';
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+
+async function loadOverview() {
+  try {
+    const [empRes, sessRes, statusRes] = await Promise.all([
+      fetch('/api/employees'),
+      fetch('/api/sessions'),
+      fetch('/api/agent/status'),
+    ]);
+    const empData  = await empRes.json();
+    const sessData = await sessRes.json();
+    const statusData = await statusRes.json();
+
+    const emps = empData.employees || [];
+    _empMap = {};
+    emps.forEach(e => { _empMap[e.profile_name] = e; });
+
+    renderEmployees(emps, statusData);
+    renderSessions(sessData.sessions || [], statusData);
+    renderStreams(statusData);
+    setConn(true);
+  } catch(e) {
+    setConn(false);
+    addLog('err', 'loadOverview: ' + e);
+  }
+}
+
+function renderEmployees(emps, statusData) {
+  const el = document.getElementById('tabEmployees');
+  if (!emps.length) { el.innerHTML = '<div class="empty-state">暂无数字员工</div>'; return; }
+
+  // Build active session_id set per profile_name
+  const activeProfiles = new Set((statusData.agents || []).map(a => {
+    const emp = Object.values(_empMap).find(e => e.id === a.session_id || e.profile_name === a.session_id);
+    return emp ? emp.profile_name : null;
+  }).filter(Boolean));
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>名称</th><th>Agent Provider</th><th>Profile</th><th>能力</th><th>状态</th>
+    </tr></thead>
+    <tbody>${emps.map(e => {
+      const provider = e.agent_provider || 'hermes';
+      const isActive = activeProfiles.has(e.profile_name);
+      const caps = Object.entries(e.capabilities || {}).filter(([,v])=>v).map(([k])=>k).join(', ') || '—';
+      return `<tr>
+        <td style="font-weight:500;color:#f1f5f9">${escHtml(e.name || '—')}</td>
+        <td><span class="pill pill-${provider}">${provider}</span></td>
+        <td class="mono">${escHtml(e.profile_name || '—')}</td>
+        <td style="font-size:12px;color:#64748b">${escHtml(caps)}</td>
+        <td>${isActive
+          ? '<span class="pill pill-active">运行中</span>'
+          : '<span class="pill pill-idle">空闲</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderSessions(sessions, statusData) {
+  const el = document.getElementById('tabSessions');
+  if (!sessions.length) { el.innerHTML = '<div class="empty-state">暂无会话</div>'; return; }
+
+  const activeStreamSids = new Set((statusData.agents || []).map(a => a.session_id));
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Session ID</th><th>Agent Provider</th><th>员工</th><th>Model</th><th>状态</th><th>更新时间</th>
+    </tr></thead>
+    <tbody>${sessions.slice(0, 50).map(s => {
+      const emp = _empMap[s.profile] || null;
+      const provider = emp ? (emp.agent_provider || 'hermes') : (s.profile ? 'hermes' : '—');
+      const empName = emp ? emp.name : (s.profile || '—');
+      const isActive = activeStreamSids.has(s.session_id);
+      const updated = s.updated_at ? new Date(s.updated_at * 1000).toLocaleString() : '—';
+      return `<tr>
+        <td class="mono clickable" onclick="fillSession('${escHtml(s.session_id)}')">${escHtml((s.session_id||'').slice(0,16))}…</td>
+        <td>${provider !== '—' ? `<span class="pill pill-${provider}">${provider}</span>` : '<span style="color:#475569">—</span>'}</td>
+        <td style="font-size:12px">${escHtml(empName)}</td>
+        <td class="mono" style="font-size:11px">${escHtml((s.model||'—').slice(0,24))}</td>
+        <td>${isActive
+          ? '<span class="pill pill-active">运行中</span>'
+          : '<span class="pill pill-idle">空闲</span>'}</td>
+        <td style="font-size:11px;color:#475569">${updated}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderStreams(statusData) {
+  const el = document.getElementById('tabStreams');
+  const agents = statusData.agents || [];
+  if (!agents.length) { el.innerHTML = '<div class="empty-state">当前没有活跃的 Stream</div>'; return; }
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Stream ID</th><th>Agent Provider</th><th>Session ID</th><th>Model</th><th>运行时长</th>
+    </tr></thead>
+    <tbody>${agents.map(a => {
+      const provider = a.provider || '—';
+      return `<tr>
+        <td class="mono clickable" onclick="fillStream('${escHtml(a.stream_id)}')">${escHtml((a.stream_id||'').slice(0,16))}…</td>
+        <td><span class="pill pill-${provider}">${provider}</span></td>
+        <td class="mono clickable" onclick="fillSession('${escHtml(a.session_id||'')}')">${escHtml((a.session_id||'').slice(0,16))}…</td>
+        <td class="mono" style="font-size:11px">${escHtml((a.model||'—').slice(0,24))}</td>
+        <td><span class="pill pill-active">${a.elapsed_seconds != null ? a.elapsed_seconds+'s' : '—'}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function switchTab(name, btn) {
+  _currentTab = name;
+  ['employees','sessions','streams'].forEach(t => {
+    document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function fillStream(id) {
+  document.getElementById('filterStream').value = id;
+  document.getElementById('filterSession').value = '';
+  fetchStatus();
+  window.scrollTo({top: document.getElementById('queryCard').offsetTop - 16, behavior: 'smooth'});
+}
+
+function fillSession(id) {
+  document.getElementById('filterSession').value = id;
+  document.getElementById('filterStream').value = '';
+  fetchStatus();
+  window.scrollTo({top: document.getElementById('queryCard').offsetTop - 16, behavior: 'smooth'});
+}
+
+// ── Agent status query ────────────────────────────────────────────────────────
 
 function buildUrl() {
   const s = document.getElementById('filterStream').value.trim();
@@ -156,25 +330,26 @@ function buildUrl() {
 
 async function fetchStatus() {
   const url = buildUrl();
-  const dot = document.getElementById('connDot');
-  const connText = document.getElementById('connText');
   try {
     const res = await fetch(url);
     const data = await res.json();
-    dot.className = 'dot active';
-    connText.textContent = '已连接';
-    connText.style.color = '#86efac';
+    setConn(true);
     document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString();
     renderAgents(data);
     document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
     addLog('ok', `${url} → ${res.status} (${data.count} agents)`);
   } catch (e) {
-    dot.className = 'dot';
-    connText.textContent = '连接失败';
-    connText.style.color = '#fca5a5';
+    setConn(false);
     document.getElementById('rawJson').textContent = String(e);
     addLog('err', String(e));
   }
+}
+
+function setConn(ok) {
+  document.getElementById('connDot').className = 'dot' + (ok ? ' active' : '');
+  const t = document.getElementById('connText');
+  t.textContent = ok ? '已连接' : '连接失败';
+  t.style.color = ok ? '#86efac' : '#fca5a5';
 }
 
 function renderAgents(data) {
@@ -191,7 +366,6 @@ function renderAgents(data) {
     const providerBadge = a.provider === 'hermes'
       ? '<span class="badge badge-hermes">Hermes</span>'
       : '<span class="badge badge-openclaw">OpenClaw</span>';
-
     const stats = buildStats(a);
     return `
       <div class="agent-card">
@@ -210,11 +384,7 @@ function buildStats(a) {
   const s = a.agent_status || {};
   const elapsed = a.elapsed_seconds != null ? a.elapsed_seconds + 's' : '—';
   const sessionId = a.session_id ? a.session_id.slice(0, 12) + '…' : '—';
-
-  const common = [
-    stat('运行时长', elapsed, true),
-    stat('Session', sessionId),
-  ];
+  const common = [stat('运行时长', elapsed, true), stat('Session', sessionId)];
 
   if (a.provider === 'hermes') {
     return [...common,
@@ -244,7 +414,7 @@ function stat(label, value, highlight) {
 }
 
 function fmt(v) { return v != null ? v.toLocaleString() : '—'; }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function addLog(type, msg) {
   const log = document.getElementById('queryLog');
@@ -271,9 +441,11 @@ function toggleAuto() {
 }
 
 function copyRaw() {
-  const text = document.getElementById('rawJson').textContent;
-  navigator.clipboard.writeText(text).catch(() => {});
+  navigator.clipboard.writeText(document.getElementById('rawJson').textContent).catch(() => {});
 }
+
+// Auto-load overview on page open
+loadOverview();
 </script>
 </body>
 </html>
