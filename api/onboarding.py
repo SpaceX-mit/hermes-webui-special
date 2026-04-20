@@ -419,6 +419,7 @@ def get_onboarding_status() -> dict:
 
     return {
         "completed": bool(settings.get("onboarding_completed")) or auto_completed,
+        "agent_platform": settings.get("agent_platform") or "hermes",
         "settings": {
             "default_model": settings.get("default_model") or DEFAULT_MODEL,
             "default_workspace": settings.get("default_workspace")
@@ -520,3 +521,147 @@ def apply_onboarding_setup(body: dict) -> dict:
 def complete_onboarding() -> dict:
     save_settings({"onboarding_completed": True})
     return get_onboarding_status()
+
+
+# ── P1: Platform selection & install detection ────────────────────────────────
+
+def apply_platform_selection(platform: str) -> dict:
+    """Persist the chosen agent platform and return updated onboarding status."""
+    platform = (platform or "hermes").strip().lower()
+    if platform not in {"hermes", "openclaw"}:
+        raise ValueError(f"Unknown platform: {platform!r}")
+    save_settings({"agent_platform": platform})
+    return get_onboarding_status()
+
+
+def _check_openclaw_sdk() -> bool:
+    try:
+        import openclaw_sdk  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _check_openclaw_gateway() -> bool:
+    """Return True if the configured (or default) OpenClaw Gateway is reachable."""
+    from api.config import load_settings as _ls
+    settings = _ls()
+    url = (settings.get("openclaw_gateway_url") or "ws://127.0.0.1:18789").strip()
+    # Convert ws:// → http:// for a quick HTTP health probe
+    http_url = url.replace("ws://", "http://").replace("wss://", "https://")
+    if not http_url.endswith("/health"):
+        http_url = http_url.rstrip("/") + "/health"
+    try:
+        import urllib.request as _ur
+        req = _ur.Request(http_url, headers={"User-Agent": "hermes-webui/onboarding"})
+        with _ur.urlopen(req, timeout=3) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def get_install_status() -> dict:
+    """Return real-time availability of each agent platform."""
+    imports_ok, _, _ = verify_hermes_imports()
+    return {
+        "hermes": bool(_HERMES_FOUND and imports_ok),
+        "openclaw_sdk": _check_openclaw_sdk(),
+        "openclaw_gateway": _check_openclaw_gateway(),
+    }
+
+
+def test_openclaw_gateway(url: str, api_key: str) -> dict:
+    """Test connectivity to an OpenClaw Gateway and optionally save the config."""
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "error": "URL is required"}
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"ws", "wss"}:
+        return {"ok": False, "error": "URL must start with ws:// or wss://"}
+
+    http_url = url.replace("ws://", "http://").replace("wss://", "https://")
+    if not http_url.endswith("/health"):
+        http_url = http_url.rstrip("/") + "/health"
+
+    try:
+        import urllib.request as _ur
+        req = _ur.Request(http_url, headers={"User-Agent": "hermes-webui/onboarding"})
+        with _ur.urlopen(req, timeout=5) as resp:
+            ok = resp.status == 200
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if ok:
+        updates: dict = {"openclaw_gateway_url": url}
+        if api_key:
+            updates["openclaw_api_key"] = api_key
+        save_settings(updates)
+
+    return {"ok": ok, "error": None}
+
+
+# ── P2: OpenClaw LLM config via Gateway config.patch ─────────────────────────
+
+def apply_openclaw_llm_config(provider: str, model: str, api_key: str, base_url: str) -> dict:
+    """
+    Write LLM provider config into the OpenClaw Gateway via config.patch RPC,
+    then persist provider/model to settings.json for status display.
+    """
+    provider = (provider or "").strip().lower()
+    model = (model or "").strip()
+    api_key = (api_key or "").strip()
+
+    if provider not in _SUPPORTED_PROVIDER_SETUPS:
+        raise ValueError(f"Unsupported provider: {provider!r}")
+    if not model:
+        raise ValueError("model is required")
+
+    provider_meta = _SUPPORTED_PROVIDER_SETUPS[provider]
+    effective_base_url = (
+        base_url.strip()
+        or provider_meta.get("default_base_url", "")
+    )
+
+    # Build the Gateway config patch.
+    # OpenClaw uses OpenAI-compatible format for all providers.
+    provider_patch: dict = {}
+    if api_key:
+        provider_patch["apiKey"] = api_key
+    if effective_base_url:
+        provider_patch["baseUrl"] = effective_base_url
+
+    patch: dict = {
+        "agents": {
+            "defaults": {
+                "llm_provider": "openai",
+                "llm_model": model,
+            }
+        }
+    }
+    if provider_patch:
+        patch["models"] = {"providers": {"openai": provider_patch}}
+
+    try:
+        from api.providers.openclaw_provider import _get_openclaw_config, _gw_conn
+        cfg = _get_openclaw_config()
+        import asyncio as _asyncio
+
+        async def _do_patch():
+            client, _ = await _gw_conn.get(cfg)
+            await client.gateway.request("config.patch", {"patch": patch})
+
+        loop = _asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_do_patch())
+        finally:
+            loop.close()
+    except Exception as exc:
+        raise RuntimeError(f"Gateway config.patch failed: {exc}") from exc
+
+    save_settings({
+        "openclaw_llm_provider": provider,
+        "openclaw_llm_model": model,
+    })
+    return get_onboarding_status()
+

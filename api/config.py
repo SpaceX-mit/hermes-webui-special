@@ -1019,6 +1019,9 @@ _SETTINGS_DEFAULTS = {
     "password_hash": None,  # PBKDF2-HMAC-SHA256 hash; None = auth disabled
     "openclaw_gateway_url": "",  # OpenClaw gateway WebSocket URL
     "openclaw_api_key": "",  # OpenClaw bearer token
+    "agent_platform": "hermes",  # default agent platform: "hermes" | "openclaw"
+    "openclaw_llm_provider": "",  # LLM provider written to OpenClaw Gateway
+    "openclaw_llm_model": "",  # LLM model written to OpenClaw Gateway
 }
 
 

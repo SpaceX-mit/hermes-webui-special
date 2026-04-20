@@ -114,6 +114,7 @@ from api.upload import handle_upload
 from api.streaming import _sse, _run_agent_streaming, cancel_stream
 from api.onboarding import (
     apply_onboarding_setup,
+    apply_platform_selection,
     get_onboarding_status,
     complete_onboarding,
 )
@@ -1015,6 +1016,47 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/onboarding/complete":
         return j(handler, complete_onboarding())
+
+    if parsed.path == "/api/onboarding/platform":
+        try:
+            return j(handler, apply_platform_selection(body.get("platform", "hermes")))
+        except ValueError as e:
+            return bad(handler, str(e))
+
+    if parsed.path == "/api/onboarding/install-status":
+        from api.onboarding import get_install_status
+        return j(handler, get_install_status())
+
+    if parsed.path == "/api/onboarding/test-gateway":
+        from api.onboarding import test_openclaw_gateway
+        try:
+            result = test_openclaw_gateway(
+                body.get("url", ""), body.get("api_key", "")
+            )
+            return j(handler, result)
+        except Exception as e:
+            return bad(handler, str(e), 500)
+
+    if parsed.path == "/api/onboarding/openclaw-llm":
+        from api.auth import is_auth_enabled as _iae
+        if not _iae():
+            import ipaddress as _ip
+            try:
+                addr = _ip.ip_address(handler.client_address[0])
+                if not (addr.is_loopback or addr.is_private):
+                    return bad(handler, "Only available from local networks when auth is disabled.", 403)
+            except ValueError:
+                return bad(handler, "Invalid client address.", 403)
+        from api.onboarding import apply_openclaw_llm_config
+        try:
+            return j(handler, apply_openclaw_llm_config(
+                body.get("provider", ""),
+                body.get("model", ""),
+                body.get("api_key", ""),
+                body.get("base_url", ""),
+            ))
+        except (ValueError, RuntimeError) as e:
+            return bad(handler, str(e), 400 if isinstance(e, ValueError) else 500)
 
     # ── Session pin (POST) ──
     if parsed.path == "/api/session/pin":

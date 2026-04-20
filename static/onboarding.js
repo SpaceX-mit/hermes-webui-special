@@ -368,7 +368,7 @@ async function nextOnboardingStep(){
 // JDUI Digital Employee Onboarding Wizard
 // ═══════════════════════════════════════════════════════════════════════════
 
-const JDUI_WIZ={step:'env',employeeName:'1 号员工',avatarIndex:0,description:'',traits:['专业高效','善于沟通','持续学习'],capabilities:{search:true,memory:true,autoExec:false,knowledge:true},selectedProvider:'spacemit',apiProvider:'openai',apiModel:'gpt-4o',apiBaseUrl:'',apiKey:''};
+const JDUI_WIZ={step:'platform',employeeName:'1 号员工',avatarIndex:0,description:'',traits:['专业高效','善于沟通','持续学习'],capabilities:{search:true,memory:true,autoExec:false,knowledge:true},selectedProvider:'spacemit',apiProvider:'openai',apiModel:'gpt-4o',apiBaseUrl:'',apiKey:'',platform:'hermes',installPollTimer:null};
 
 function _loadJduiWizard(){
   const overlay=$('onboardingOverlay');
@@ -384,7 +384,7 @@ function _loadJduiWizard(){
 }
 
 function _jduiStepNum(){
-  const m={env:1,model:2,apikey:2,employee:3,confirm:3,loading:3};
+  const m={platform:1,env:1,install:2,model:2,apikey:2,employee:3,confirm:3,loading:3};
   return m[JDUI_WIZ.step]||1;
 }
 
@@ -417,8 +417,8 @@ function _renderJduiWizard(){
 function _renderJduiStepBody(){
   const body=$('jduiWizBody');
   if(!body)return;
-  const fn={env:_renderJduiEnvCheck,model:_renderJduiModelSelect,apikey:_renderJduiApiKey,employee:_renderJduiCreateEmployee,confirm:_renderJduiConfirm,loading:_renderJduiLoading};
-  (fn[JDUI_WIZ.step]||fn.env)(body);
+  const fn={platform:_renderJduiPlatformSelect,env:_renderJduiEnvCheck,install:_renderJduiInstall,model:_renderJduiModelSelect,apikey:_renderJduiApiKey,employee:_renderJduiCreateEmployee,confirm:_renderJduiConfirm,loading:_renderJduiLoading};
+  (fn[JDUI_WIZ.step]||fn.platform)(body);
 }
 
 function _jduiGoStep(step){
@@ -457,25 +457,359 @@ function _renderJduiEnvCheck(body){
   });
 }
 
+// ── P1: Platform selection step ───────────────────────────────────────────────
+
+function _renderJduiPlatformSelect(body){
+  const status=ONBOARDING.status||{};
+  const installStatus=status.install_status||{};
+  const hermesOk=installStatus.hermes!==false&&(status.system||{}).hermes_found!==false;
+  const oclawSdk=!!installStatus.openclaw_sdk;
+  const oclawGw=!!installStatus.openclaw_gateway;
+  const oclawOk=oclawSdk&&oclawGw;
+
+  function card(id,title,desc,tags,ok,selected){
+    const border=selected?'border:2px solid #b2e40d;':'border:2px solid rgba(0,0,0,0.08);';
+    const badge=ok
+      ?'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#4EA100;background:rgba(78,161,0,0.1);padding:2px 8px;border-radius:20px">✓ 已检测到</span>'
+      :'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#888;background:rgba(0,0,0,0.05);padding:2px 8px;border-radius:20px">未检测到</span>';
+    const tagHtml=tags.map(t=>`<span style="font-size:11px;color:#206cff;background:rgba(32,108,255,0.08);padding:2px 8px;border-radius:20px">${t}</span>`).join('');
+    return `<div class="jdui-platform-card${selected?' selected':''}" style="cursor:pointer;border-radius:16px;padding:20px;${border}background:#fff;transition:all .2s" onclick="_jduiSelectPlatform('${id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <h4 style="margin:0;font-size:16px;font-weight:700">${title}</h4>${badge}
+      </div>
+      <p style="font-size:13px;color:rgba(60,60,67,0.7);margin:0 0 12px">${desc}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${tagHtml}</div>
+    </div>`;
+  }
+
+  body.innerHTML=`<div class="jdui-step">
+    <h3>选择 Agent 平台</h3>
+    <p class="step-desc">选择驱动数字员工的 Agent 引擎，两种平台均可在安装后切换</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin:20px 0" id="jduiPlatformCards">
+      ${card('hermes','Hermes Agent','本地 Python Agent，开箱即用，支持 50+ 工具和多平台消息集成',['本地运行','50+ 工具','多平台消息'],hermesOk,JDUI_WIZ.platform==='hermes')}
+      ${card('openclaw','OpenClaw','Gateway 架构，支持 25+ 消息平台、插件系统和多 Agent 协调',['Gateway 架构','25+ 平台','插件系统'],oclawOk,JDUI_WIZ.platform==='openclaw')}
+    </div>
+    <div class="jdui-step-actions">
+      <button class="jdui-btn-primary" onclick="_jduiConfirmPlatform()">下一步</button>
+    </div>
+  </div>`;
+}
+
+function _jduiSelectPlatform(id){
+  JDUI_WIZ.platform=id;
+  _renderJduiPlatformSelect($('jduiWizBody'));
+}
+
+async function _jduiConfirmPlatform(){
+  try{
+    await api('/api/onboarding/platform',{method:'POST',body:JSON.stringify({platform:JDUI_WIZ.platform})});
+    ONBOARDING.status=await api('/api/onboarding/status');
+  }catch(e){console.warn('platform save failed',e);}
+  _jduiGoStep('install');
+}
+
+// ── P1: Install detection step ────────────────────────────────────────────────
+
+async function _renderJduiInstall(body){
+  const platform=JDUI_WIZ.platform;
+  let status={hermes:false,openclaw_sdk:false,openclaw_gateway:false};
+  try{status=await api('/api/onboarding/install-status');}catch(e){}
+
+  if(platform==='hermes'){
+    _renderJduiHermesInstall(body,status);
+  } else {
+    _renderJduiOpenClawInstall(body,status);
+  }
+}
+
+function _renderJduiHermesInstall(body,status){
+  const ok=status.hermes;
+  if(ok){
+    body.innerHTML=`<div class="jdui-step">
+      <h3>Hermes Agent</h3>
+      <p class="step-desc">Agent 环境已就绪，可以继续配置</p>
+      <div style="background:rgba(78,161,0,0.08);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:12px;margin:20px 0">
+        <span style="font-size:24px">✓</span>
+        <div><strong style="color:#4EA100">Hermes Agent 已检测到</strong><p style="margin:4px 0 0;font-size:13px;color:rgba(60,60,67,0.7)">环境正常，可以继续</p></div>
+      </div>
+      <div class="jdui-step-actions">
+        <button class="jdui-btn-secondary" onclick="_jduiGoStep('platform')">上一步</button>
+        <button class="jdui-btn-primary" onclick="_jduiGoStep('model')">下一步</button>
+      </div>
+    </div>`;
+    return;
+  }
+  body.innerHTML=`<div class="jdui-step">
+    <h3>安装 Hermes Agent</h3>
+    <p class="step-desc">未检测到 Hermes Agent，请按以下步骤安装</p>
+    <div style="background:#f5f5f7;border-radius:12px;padding:16px 20px;margin:20px 0;font-family:monospace;font-size:13px">
+      <div style="color:#888;margin-bottom:8px"># 方式一：pip 安装</div>
+      <div>pip install hermes-agent</div>
+      <div style="color:#888;margin:12px 0 8px"># 方式二：源码安装</div>
+      <div>git clone &lt;repo&gt; &amp;&amp; pip install -e .</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+      <span id="jduiInstallStatusBadge" style="font-size:13px;color:#888">等待检测...</span>
+      <button class="jdui-btn-secondary" style="padding:6px 16px;font-size:13px" onclick="_jduiCheckHermesInstall()">重新检测</button>
+    </div>
+    <div class="jdui-step-actions">
+      <button class="jdui-btn-secondary" onclick="_jduiGoStep('platform')">上一步</button>
+      <button class="jdui-btn-primary" id="jduiInstallNextBtn" disabled onclick="_jduiGoStep('model')">下一步</button>
+    </div>
+  </div>`;
+  _jduiStartInstallPoll('hermes');
+}
+
+function _renderJduiOpenClawInstall(body,status){
+  const sdkOk=status.openclaw_sdk;
+  const gwOk=status.openclaw_gateway;
+  const settings=(ONBOARDING.status||{}).settings||{};
+  const savedUrl=((ONBOARDING.status||{}).openclaw_gateway_url)||'ws://127.0.0.1:18789';
+
+  body.innerHTML=`<div class="jdui-step">
+    <h3>安装 OpenClaw</h3>
+    <p class="step-desc">需要完成 SDK 安装和 Gateway 连接两个步骤</p>
+
+    <div style="margin:20px 0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="width:22px;height:22px;border-radius:50%;background:${sdkOk?'#4EA100':'#ddd'};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">${sdkOk?'✓':'1'}</span>
+        <strong>安装 OpenClaw SDK</strong>
+        ${sdkOk?'<span style="font-size:12px;color:#4EA100">已安装</span>':''}
+      </div>
+      ${!sdkOk?`<div style="background:#f5f5f7;border-radius:10px;padding:12px 16px;font-family:monospace;font-size:13px;margin-left:32px">pip install openclaw-sdk</div>
+      <div style="margin-left:32px;margin-top:8px;display:flex;align-items:center;gap:8px">
+        <span id="jduiSdkBadge" style="font-size:12px;color:#888">等待检测...</span>
+        <button class="jdui-btn-secondary" style="padding:4px 12px;font-size:12px" onclick="_jduiCheckOpenClawInstall()">重新检测</button>
+      </div>`:''}
+    </div>
+
+    <div style="margin:20px 0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="width:22px;height:22px;border-radius:50%;background:${gwOk?'#4EA100':'#ddd'};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">${gwOk?'✓':'2'}</span>
+        <strong>配置 Gateway 连接</strong>
+        ${gwOk?'<span style="font-size:12px;color:#4EA100">已连接</span>':''}
+      </div>
+      <div style="margin-left:32px">
+        <div class="jdui-form-group" style="margin-bottom:10px">
+          <label style="font-size:13px;color:rgba(60,60,67,0.7)">Gateway URL</label>
+          <input class="jdui-input" id="jduiGwUrl" value="${esc(savedUrl)}" placeholder="ws://127.0.0.1:18789">
+        </div>
+        <div class="jdui-form-group" style="margin-bottom:10px">
+          <label style="font-size:13px;color:rgba(60,60,67,0.7)">API Key（可选）</label>
+          <input class="jdui-input" id="jduiGwApiKey" type="password" placeholder="留空表示无需认证">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="jdui-btn-secondary" style="padding:6px 16px;font-size:13px" onclick="_jduiTestGateway()">测试连接</button>
+          <span id="jduiGwTestResult" style="font-size:13px"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="jdui-step-actions">
+      <button class="jdui-btn-secondary" onclick="_jduiGoStep('platform')">上一步</button>
+      <button class="jdui-btn-primary" id="jduiInstallNextBtn" ${sdkOk&&gwOk?'':'disabled'} onclick="_jduiGoStep('model')">下一步</button>
+    </div>
+  </div>`;
+
+  if(!sdkOk) _jduiStartInstallPoll('openclaw');
+}
+
+async function _jduiCheckHermesInstall(){
+  const badge=$('jduiInstallStatusBadge');
+  if(badge) badge.textContent='检测中...';
+  try{
+    const s=await api('/api/onboarding/install-status');
+    if(s.hermes){
+      if(badge){badge.textContent='✓ 已检测到';badge.style.color='#4EA100';}
+      const btn=$('jduiInstallNextBtn');if(btn)btn.disabled=false;
+      _jduiStopInstallPoll();
+    } else {
+      if(badge){badge.textContent='未检测到，请安装后重试';badge.style.color='#888';}
+    }
+  }catch(e){if(badge)badge.textContent='检测失败';}
+}
+
+async function _jduiCheckOpenClawInstall(){
+  const badge=$('jduiSdkBadge');
+  if(badge) badge.textContent='检测中...';
+  try{
+    const s=await api('/api/onboarding/install-status');
+    if(s.openclaw_sdk){
+      if(badge){badge.textContent='✓ 已安装';badge.style.color='#4EA100';}
+      _jduiStopInstallPoll();
+      // Re-render to update step indicators
+      _renderJduiInstall($('jduiWizBody'));
+    } else {
+      if(badge){badge.textContent='未检测到，请安装后重试';badge.style.color='#888';}
+    }
+  }catch(e){if(badge)badge.textContent='检测失败';}
+}
+
+async function _jduiTestGateway(){
+  const url=($('jduiGwUrl')||{}).value||'';
+  const key=($('jduiGwApiKey')||{}).value||'';
+  const result=$('jduiGwTestResult');
+  if(result) result.textContent='连接中...';
+  try{
+    const r=await api('/api/onboarding/test-gateway',{method:'POST',body:JSON.stringify({url,api_key:key})});
+    if(r.ok){
+      if(result){result.textContent='✓ 连接成功';result.style.color='#4EA100';}
+      ONBOARDING.status=await api('/api/onboarding/status');
+      const btn=$('jduiInstallNextBtn');if(btn)btn.disabled=false;
+    } else {
+      if(result){result.textContent='✗ '+(r.error||'连接失败');result.style.color='#e53935';}
+    }
+  }catch(e){
+    if(result){result.textContent='✗ 请求失败';result.style.color='#e53935';}
+  }
+}
+
+function _jduiStartInstallPoll(type){
+  _jduiStopInstallPoll();
+  JDUI_WIZ.installPollTimer=setInterval(async()=>{
+    try{
+      const s=await api('/api/onboarding/install-status');
+      const done=type==='hermes'?s.hermes:(s.openclaw_sdk&&s.openclaw_gateway);
+      if(done){
+        _jduiStopInstallPoll();
+        _renderJduiInstall($('jduiWizBody'));
+      }
+    }catch(e){}
+  },3000);
+}
+
+function _jduiStopInstallPoll(){
+  if(JDUI_WIZ.installPollTimer){clearInterval(JDUI_WIZ.installPollTimer);JDUI_WIZ.installPollTimer=null;}
+}
+
+// ── P2: LLM step — platform-aware ────────────────────────────────────────────
+
 function _renderJduiModelSelect(body){
-  body.innerHTML=`<div class="jdui-step"><h3>选择核心引擎</h3><p class="step-desc">选择驱动数字员工的 AI 引擎</p><div class="jdui-model-cards"><div class="jdui-model-card${JDUI_WIZ.selectedProvider==='spacemit'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='spacemit';_renderJduiModelSelect($('jduiWizBody'))"><div class="jdui-model-badge" style="background:rgba(178,228,13,0.15);color:#558b2f">推荐方案</div><h4>Spacemit Engine</h4><p>预配置的高性能引擎，支持 GPT-5 和 Claude 4 双推理模型，开箱即用。</p></div><div class="jdui-model-card${JDUI_WIZ.selectedProvider==='custom'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='custom';_renderJduiModelSelect($('jduiWizBody'))"><div class="jdui-model-badge" style="background:rgba(0,0,0,0.05);color:rgba(60,60,67,0.6)">高级路径</div><h4>自定义 API Key</h4><p>使用您自己的 OpenAI、Anthropic 或兼容提供商的 API Key。</p></div></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('env')">上一步</button><button class="jdui-btn-primary" onclick="JDUI_WIZ.selectedProvider==='custom'?_jduiGoStep('apikey'):_jduiGoStep('employee')">下一步</button></div></div>`;
+  const platform=JDUI_WIZ.platform;
+  // Provider options for custom API key path
+  const cnProviders=[
+    {id:'minimax-cn',label:'MiniMax（国内）',hint:'MINIMAX_API_KEY',url:'https://platform.minimax.chat/'},
+    {id:'kimi-cn',label:'Kimi（国内）',hint:'MOONSHOT_API_KEY',url:'https://platform.moonshot.cn/'},
+  ];
+  const intlProviders=[
+    {id:'openrouter',label:'OpenRouter',hint:'OPENROUTER_API_KEY',url:'https://openrouter.ai/keys'},
+    {id:'anthropic',label:'Anthropic',hint:'ANTHROPIC_API_KEY',url:'https://console.anthropic.com/'},
+    {id:'openai',label:'OpenAI',hint:'OPENAI_API_KEY',url:'https://platform.openai.com/api-keys'},
+    {id:'custom',label:'自定义 OpenAI 兼容',hint:'OPENAI_API_KEY',url:''},
+  ];
+  const allProviders=[...cnProviders,...intlProviders];
+
+  body.innerHTML=`<div class="jdui-step">
+    <h3>选择核心引擎</h3>
+    <p class="step-desc">选择驱动数字员工的 AI 模型服务</p>
+    <div class="jdui-model-cards">
+      <div class="jdui-model-card${JDUI_WIZ.selectedProvider==='spacemit'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='spacemit';_renderJduiModelSelect($('jduiWizBody'))">
+        <div class="jdui-model-badge" style="background:rgba(178,228,13,0.15);color:#558b2f">推荐方案</div>
+        <h4>Spacemit Engine</h4>
+        <p>预配置的高性能引擎，支持 GPT-5 和 Claude 4 双推理模型，开箱即用。</p>
+      </div>
+      <div class="jdui-model-card${JDUI_WIZ.selectedProvider==='custom'?' selected':''}" onclick="JDUI_WIZ.selectedProvider='custom';_renderJduiModelSelect($('jduiWizBody'))">
+        <div class="jdui-model-badge" style="background:rgba(0,0,0,0.05);color:rgba(60,60,67,0.6)">高级路径</div>
+        <h4>自定义 API Key</h4>
+        <p>使用您自己的 API Key，支持 MiniMax、Kimi、OpenAI、Anthropic 等。</p>
+      </div>
+    </div>
+    ${JDUI_WIZ.selectedProvider==='custom'?`
+    <div style="margin-top:20px">
+      <div class="jdui-form-group">
+        <label>服务商</label>
+        <select class="jdui-input" id="jduiLlmProvider" onchange="_jduiOnProviderChange(this.value)">
+          ${allProviders.map(p=>`<option value="${p.id}"${JDUI_WIZ.apiProvider===p.id?' selected':''}>${p.label}</option>`).join('')}
+        </select>
+      </div>
+      <div id="jduiLlmModelField"></div>
+      <div id="jduiLlmBaseUrlField"></div>
+      <div class="jdui-form-group">
+        <label id="jduiLlmKeyLabel">API Key</label>
+        <input class="jdui-input" id="jduiApiKeyInput" type="password" value="${esc(JDUI_WIZ.apiKey)}" placeholder="sk-...">
+        <p id="jduiLlmKeyHint" style="font-size:12px;color:rgba(60,60,67,0.5);margin:4px 0 0"></p>
+      </div>
+    </div>`:''}
+    <div class="jdui-step-actions">
+      <button class="jdui-btn-secondary" onclick="_jduiGoStep('install')">上一步</button>
+      <button class="jdui-btn-primary" onclick="_jduiSaveApiKey()">下一步</button>
+    </div>
+  </div>`;
+  if(JDUI_WIZ.selectedProvider==='custom') _jduiOnProviderChange(JDUI_WIZ.apiProvider||'openrouter');
 }
 
-function _renderJduiApiKey(body){
-  const providers=['OpenAI','Anthropic','Compatible'];
-  body.innerHTML=`<div class="jdui-step"><h3>配置 API Key</h3><p class="step-desc">输入您的 API 凭证以连接模型服务</p><div class="jdui-apikey-tabs" id="jduiApiTabs"></div><div class="jdui-form-group"><label>模型名称</label><input class="jdui-input" id="jduiApiModel" value="${JDUI_WIZ.apiModel}" placeholder="gpt-4o"></div><div class="jdui-form-group"><label>Base URL</label><input class="jdui-input" id="jduiApiBaseUrl" value="${JDUI_WIZ.apiBaseUrl}" placeholder="https://api.openai.com/v1"></div><div class="jdui-form-group"><label>API Key</label><input class="jdui-input" id="jduiApiKeyInput" type="password" value="${JDUI_WIZ.apiKey}" placeholder="sk-..."></div><div style="background:rgba(32,108,255,0.06);border-radius:12px;padding:12px 16px;margin-top:8px"><p style="font-size:12px;color:rgba(60,60,67,0.6);font-family:'Inter','Noto Sans SC',sans-serif">系统将自动测试连接可用性，确保 API Key 有效。</p></div><div class="jdui-step-actions"><button class="jdui-btn-secondary" onclick="_jduiGoStep('model')">上一步</button><button class="jdui-btn-primary" onclick="_jduiSaveApiKey()">下一步</button></div></div>`;
-  const tabs=$('jduiApiTabs');
-  providers.forEach(p=>{const btn=document.createElement('button');btn.className='jdui-apikey-tab'+(p.toLowerCase()===JDUI_WIZ.apiProvider?' active':'');btn.textContent=p;btn.onclick=()=>{JDUI_WIZ.apiProvider=p.toLowerCase();_renderJduiApiKey(body);};tabs.appendChild(btn);});
+function _jduiOnProviderChange(providerId){
+  JDUI_WIZ.apiProvider=providerId;
+  const sel=$('jduiLlmProvider');if(sel)sel.value=providerId;
+
+  // Fetch provider meta from onboarding status
+  const providers=_getOnboardingSetupProviders();
+  const meta=providers.find(p=>p.id===providerId)||null;
+
+  // Model field
+  const modelField=$('jduiLlmModelField');
+  if(modelField){
+    const models=(meta&&meta.models)||[];
+    if(providerId==='custom'||!models.length){
+      modelField.innerHTML=`<div class="jdui-form-group"><label>模型名称</label><input class="jdui-input" id="jduiApiModel" value="${esc(JDUI_WIZ.apiModel||'gpt-4o-mini')}" placeholder="gpt-4o-mini"></div>`;
+    } else {
+      const opts=models.map(m=>`<option value="${esc(m.id)}"${JDUI_WIZ.apiModel===m.id?' selected':''}>${esc(m.label)}</option>`).join('');
+      modelField.innerHTML=`<div class="jdui-form-group"><label>模型</label><select class="jdui-input" id="jduiApiModel">${opts}</select></div>`;
+    }
+  }
+
+  // Base URL field — only show for custom
+  const baseUrlField=$('jduiLlmBaseUrlField');
+  if(baseUrlField){
+    if(providerId==='custom'){
+      baseUrlField.innerHTML=`<div class="jdui-form-group"><label>Base URL</label><input class="jdui-input" id="jduiApiBaseUrl" value="${esc(JDUI_WIZ.apiBaseUrl||'')}" placeholder="https://api.openai.com/v1"></div>`;
+    } else {
+      const defaultUrl=(meta&&meta.default_base_url)||'';
+      baseUrlField.innerHTML=defaultUrl?`<p style="font-size:12px;color:rgba(60,60,67,0.5);margin:0 0 12px">Base URL: ${esc(defaultUrl)}</p>`:'';
+    }
+  }
+
+  // Key hint
+  const hint=$('jduiLlmKeyHint');
+  if(hint&&meta) hint.textContent=`环境变量：${meta.env_var}`;
+
+  const keyLabel=$('jduiLlmKeyLabel');
+  if(keyLabel&&meta) keyLabel.textContent=`${meta.label} API Key`;
 }
 
-function _jduiSaveApiKey(){
-  JDUI_WIZ.apiModel=($('jduiApiModel')||{}).value||'gpt-4o';
-  JDUI_WIZ.apiBaseUrl=($('jduiApiBaseUrl')||{}).value||'';
-  JDUI_WIZ.apiKey=($('jduiApiKeyInput')||{}).value||'';
-  ONBOARDING.form.provider=JDUI_WIZ.apiProvider==='compatible'?'custom':JDUI_WIZ.apiProvider;
-  ONBOARDING.form.model=JDUI_WIZ.apiModel;
-  ONBOARDING.form.baseUrl=JDUI_WIZ.apiBaseUrl;
-  ONBOARDING.form.apiKey=JDUI_WIZ.apiKey;
+async function _jduiSaveApiKey(){
+  if(JDUI_WIZ.selectedProvider==='spacemit'){
+    // Spacemit: no key needed, skip LLM config
+    _jduiGoStep('employee');
+    return;
+  }
+  const providerId=JDUI_WIZ.apiProvider||'openrouter';
+  const modelEl=$('jduiApiModel');
+  const model=(modelEl?modelEl.value:'')||JDUI_WIZ.apiModel||'gpt-4o';
+  const baseUrlEl=$('jduiApiBaseUrl');
+  const baseUrl=baseUrlEl?baseUrlEl.value:'';
+  const apiKey=($('jduiApiKeyInput')||{}).value||'';
+
+  JDUI_WIZ.apiProvider=providerId;
+  JDUI_WIZ.apiModel=model;
+  JDUI_WIZ.apiBaseUrl=baseUrl;
+  JDUI_WIZ.apiKey=apiKey;
+
+  // Map to ONBOARDING.form for _saveOnboardingProviderSetup()
+  ONBOARDING.form.provider=providerId;
+  ONBOARDING.form.model=model;
+  ONBOARDING.form.baseUrl=baseUrl;
+  ONBOARDING.form.apiKey=apiKey;
+
+  // P2: If OpenClaw platform, write config via Gateway
+  if(JDUI_WIZ.platform==='openclaw'){
+    try{
+      await api('/api/onboarding/openclaw-llm',{method:'POST',body:JSON.stringify({
+        provider:providerId,model,api_key:apiKey,base_url:baseUrl
+      })});
+    }catch(e){console.warn('openclaw llm config failed',e);}
+  }
+
   _jduiGoStep('employee');
 }
 
