@@ -420,6 +420,7 @@ def get_onboarding_status() -> dict:
     return {
         "completed": bool(settings.get("onboarding_completed")) or auto_completed,
         "agent_platform": settings.get("agent_platform") or "hermes",
+        "install_status": get_install_status(),
         "settings": {
             "default_model": settings.get("default_model") or DEFAULT_MODEL,
             "default_workspace": settings.get("default_workspace")

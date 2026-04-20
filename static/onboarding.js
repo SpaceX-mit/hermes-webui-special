@@ -462,7 +462,7 @@ function _renderJduiEnvCheck(body){
 function _renderJduiPlatformSelect(body){
   const status=ONBOARDING.status||{};
   const installStatus=status.install_status||{};
-  const hermesOk=installStatus.hermes!==false&&(status.system||{}).hermes_found!==false;
+  const hermesOk=!!installStatus.hermes;
   const oclawSdk=!!installStatus.openclaw_sdk;
   const oclawGw=!!installStatus.openclaw_gateway;
   const oclawOk=oclawSdk&&oclawGw;
