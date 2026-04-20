@@ -50,6 +50,22 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "requires_base_url": False,
         "models": list(_PROVIDER_MODELS.get("openai", [])),
     },
+    "minimax-cn": {
+        "label": "MiniMax（国内）",
+        "env_var": "MINIMAX_API_KEY",
+        "default_model": "MiniMax-M2.7-highspeed",
+        "default_base_url": "https://api.minimax.chat/v1",
+        "requires_base_url": False,
+        "models": list(_PROVIDER_MODELS.get("minimax", [])),
+    },
+    "kimi-cn": {
+        "label": "Kimi（国内）",
+        "env_var": "MOONSHOT_API_KEY",
+        "default_model": "kimi-latest",
+        "default_base_url": "https://api.moonshot.cn/v1",
+        "requires_base_url": False,
+        "models": list(_PROVIDER_MODELS.get("kimi-coding", [])),
+    },
     "custom": {
         "label": "Custom OpenAI-compatible",
         "env_var": "OPENAI_API_KEY",
@@ -467,10 +483,9 @@ def apply_onboarding_setup(body: dict) -> dict:
 
     if provider == "custom":
         model_cfg["base_url"] = base_url
-    elif provider == "openai":
-        model_cfg["base_url"] = (
-            provider_meta.get("default_base_url") or "https://api.openai.com/v1"
-        )
+    elif provider_meta.get("default_base_url"):
+        # Providers with a fixed non-standard base URL (e.g. minimax-cn, kimi-cn)
+        model_cfg["base_url"] = provider_meta["default_base_url"]
     else:
         model_cfg.pop("base_url", None)
 
