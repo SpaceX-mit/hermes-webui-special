@@ -384,7 +384,7 @@ function _loadJduiWizard(){
 }
 
 function _jduiStepNum(){
-  const m={platform:1,env:1,install:2,model:2,apikey:2,employee:3,confirm:3,loading:3};
+  const m={platform:1,env:1,install:2,model:2,employee:3,confirm:3,loading:3};
   return m[JDUI_WIZ.step]||1;
 }
 
@@ -417,7 +417,7 @@ function _renderJduiWizard(){
 function _renderJduiStepBody(){
   const body=$('jduiWizBody');
   if(!body)return;
-  const fn={platform:_renderJduiPlatformSelect,env:_renderJduiEnvCheck,install:_renderJduiInstall,model:_renderJduiModelSelect,apikey:_renderJduiApiKey,employee:_renderJduiCreateEmployee,confirm:_renderJduiConfirm,loading:_renderJduiLoading};
+  const fn={platform:_renderJduiPlatformSelect,env:_renderJduiEnvCheck,install:_renderJduiInstall,model:_renderJduiModelSelect,employee:_renderJduiCreateEmployee,confirm:_renderJduiConfirm,loading:_renderJduiLoading};
   (fn[JDUI_WIZ.step]||fn.platform)(body);
 }
 
