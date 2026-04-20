@@ -375,6 +375,9 @@ function _loadJduiWizard(){
   overlay.style.display='flex';
   overlay.style.background='#232323';
   overlay.innerHTML='';
+  // Sync saved platform choice and install status from onboarding status
+  const status=ONBOARDING.status||{};
+  if(status.agent_platform) JDUI_WIZ.platform=status.agent_platform;
   const shell=document.createElement('div');
   shell.className='jdui-wizard';
   shell.id='jduiWizardShell';
@@ -467,27 +470,37 @@ function _renderJduiPlatformSelect(body){
   const oclawGw=!!installStatus.openclaw_gateway;
   const oclawOk=oclawSdk&&oclawGw;
 
-  function card(id,title,desc,tags,ok,selected){
+  function badge(ok,label){
+    return ok
+      ?`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#4EA100;background:rgba(78,161,0,0.1);padding:2px 8px;border-radius:20px">✓ ${label||'已检测到'}</span>`
+      :`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#888;background:rgba(0,0,0,0.05);padding:2px 8px;border-radius:20px">未检测到</span>`;
+  }
+
+  function card(id,title,desc,tags,ok,selected,extraBadges){
     const border=selected?'border:2px solid #b2e40d;':'border:2px solid rgba(0,0,0,0.08);';
-    const badge=ok
-      ?'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#4EA100;background:rgba(78,161,0,0.1);padding:2px 8px;border-radius:20px">✓ 已检测到</span>'
-      :'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#888;background:rgba(0,0,0,0.05);padding:2px 8px;border-radius:20px">未检测到</span>';
     const tagHtml=tags.map(t=>`<span style="font-size:11px;color:#206cff;background:rgba(32,108,255,0.08);padding:2px 8px;border-radius:20px">${t}</span>`).join('');
+    const badgeRow=(extraBadges||[badge(ok)]).join(' ');
     return `<div class="jdui-platform-card${selected?' selected':''}" style="cursor:pointer;border-radius:16px;padding:20px;${border}background:#fff;transition:all .2s" onclick="_jduiSelectPlatform('${id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <h4 style="margin:0;font-size:16px;font-weight:700">${title}</h4>${badge}
+        <h4 style="margin:0;font-size:16px;font-weight:700">${title}</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${badgeRow}</div>
       </div>
       <p style="font-size:13px;color:rgba(60,60,67,0.7);margin:0 0 12px">${desc}</p>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${tagHtml}</div>
     </div>`;
   }
 
+  const oclawBadges=[
+    badge(oclawSdk,'SDK'),
+    badge(oclawGw,'Gateway'),
+  ];
+
   body.innerHTML=`<div class="jdui-step">
     <h3>选择 Agent 平台</h3>
     <p class="step-desc">选择驱动数字员工的 Agent 引擎，两种平台均可在安装后切换</p>
     <div style="display:flex;flex-direction:column;gap:12px;margin:20px 0" id="jduiPlatformCards">
       ${card('hermes','Hermes Agent','本地 Python Agent，开箱即用，支持 50+ 工具和多平台消息集成',['本地运行','50+ 工具','多平台消息'],hermesOk,JDUI_WIZ.platform==='hermes')}
-      ${card('openclaw','OpenClaw','Gateway 架构，支持 25+ 消息平台、插件系统和多 Agent 协调',['Gateway 架构','25+ 平台','插件系统'],oclawOk,JDUI_WIZ.platform==='openclaw')}
+      ${card('openclaw','OpenClaw','Gateway 架构，支持 25+ 消息平台、插件系统和多 Agent 协调',['Gateway 架构','25+ 平台','插件系统'],oclawOk,JDUI_WIZ.platform==='openclaw',oclawBadges)}
     </div>
     <div class="jdui-step-actions">
       <button class="jdui-btn-primary" onclick="_jduiConfirmPlatform()">下一步</button>
