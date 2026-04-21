@@ -84,7 +84,42 @@ def _profile_default_workspace() -> str:
     return str(_BOOT_DEFAULT_WORKSPACE)
 
 
-# ── Public API ──────────────────────────────────────────────────────────────
+def get_workspace_for_profile(profile_name: str) -> str:
+    """Return the default workspace for a specific named profile.
+
+    Reads the profile's config.yaml directly without switching the active
+    profile, so it is safe to call for any employee profile at session
+    creation time.
+    """
+    try:
+        from api.profiles import _DEFAULT_HERMES_HOME
+        profile_home = _DEFAULT_HERMES_HOME / 'profiles' / profile_name
+        config_path = profile_home / 'config.yaml'
+        if config_path.exists():
+            try:
+                import yaml as _yaml
+                cfg = _yaml.safe_load(config_path.read_text()) or {}
+            except Exception:
+                cfg = {}
+            if isinstance(cfg, dict):
+                for key in ('workspace', 'default_workspace'):
+                    ws = cfg.get(key)
+                    if ws:
+                        p = Path(str(ws)).expanduser().resolve()
+                        if p.is_dir():
+                            return str(p)
+        # Also check profile's last_workspace.txt
+        lw_file = profile_home / 'webui_state' / 'last_workspace.txt'
+        if lw_file.exists():
+            p_str = lw_file.read_text(encoding='utf-8').strip()
+            if p_str and Path(p_str).is_dir():
+                return p_str
+    except Exception:
+        pass
+    return str(_BOOT_DEFAULT_WORKSPACE)
+
+
+
 
 def _clean_workspace_list(workspaces: list) -> list:
     """Sanitize a workspace list:

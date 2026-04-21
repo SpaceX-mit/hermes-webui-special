@@ -639,9 +639,18 @@ def handle_post(handler, parsed) -> bool:
                 from api.employees import list_employees
                 for _emp in list_employees().get('employees', []):
                     if _emp.get('id') == _emp_id:
-                        s.profile = _emp.get('profile_name', s.profile)
+                        _pname = _emp.get('profile_name', s.profile)
+                        s.profile = _pname
                         if hasattr(s, 'employee_id'):
                             s.employee_id = _emp_id
+                        # Set workspace to the employee's profile workspace if not
+                        # explicitly provided in the request body.
+                        if not body.get("workspace") and _emp.get('agent_provider', 'hermes') == 'hermes':
+                            try:
+                                from api.workspace import get_workspace_for_profile
+                                s.workspace = get_workspace_for_profile(_pname)
+                            except Exception:
+                                pass
                         # P2: For OpenClaw employees, create a Gateway session in the
                         # background so it doesn't block the HTTP response.
                         if _emp.get('agent_provider') == 'openclaw':
