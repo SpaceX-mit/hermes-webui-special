@@ -156,7 +156,7 @@ async function _newSessionForEmployee(empId) {
   if (typeof updateQueueBadge === 'function') updateQueueBadge();
   S.toolCalls = [];
   if (typeof clearLiveToolCards === 'function') clearLiveToolCards();
-  const ws = S.session ? S.session.workspace : null;
+  const ws = null; // workspace is resolved server-side per employee profile
   const model = $('modelSelect') ? $('modelSelect').value : '';
   const data = await api('/api/session/new', {
     method: 'POST',
