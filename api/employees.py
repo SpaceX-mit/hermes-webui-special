@@ -86,7 +86,37 @@ def _write_identity_md(profile_name, name, description):
     (profile_dir / 'IDENTITY.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
-def _update_profile_toolsets(profile_name, capabilities):
+def _set_profile_workspace(profile_name, workspace_path: str):
+    """Write the workspace path into the profile's config.yaml."""
+    profile_dir = _get_profile_dir(profile_name)
+    config_path = profile_dir / 'config.yaml'
+    try:
+        import yaml as _yaml
+        cfg = {}
+        if config_path.exists():
+            try:
+                loaded = _yaml.safe_load(config_path.read_text())
+                if isinstance(loaded, dict):
+                    cfg = loaded
+            except Exception:
+                pass
+        cfg['workspace'] = workspace_path
+        config_path.write_text(_yaml.dump(cfg, default_flow_style=False, allow_unicode=True))
+    except ImportError:
+        # yaml not available — append/replace workspace line manually
+        import re
+        line = f'workspace: {workspace_path}\n'
+        if config_path.exists():
+            text = config_path.read_text()
+            text = re.sub(r'^workspace:.*\n', line, text, flags=re.MULTILINE)
+            if 'workspace:' not in text:
+                text += line
+            config_path.write_text(text)
+        else:
+            config_path.write_text(line)
+
+
+
     """Update platform_toolsets.cli in the profile's config.yaml."""
     profile_dir = _get_profile_dir(profile_name)
     config_path = profile_dir / 'config.yaml'
@@ -182,6 +212,10 @@ def create_employee(body):
             _write_soul_md(profile_name, _generate_soul_md(name, description, traits))
             _write_identity_md(profile_name, name, description)
             _update_profile_toolsets(profile_name, capabilities)
+            # Set workspace to the profile's own workspace/ subdirectory
+            ws_path = _get_profile_dir(profile_name) / 'workspace'
+            ws_path.mkdir(exist_ok=True)
+            _set_profile_workspace(profile_name, str(ws_path))
         except Exception:
             pass
     elif emp['agent_provider'] == 'openclaw':
