@@ -525,9 +525,12 @@ async function _jduiConfirmPlatform(){
 
 async function _renderJduiInstall(body){
   const platform=JDUI_WIZ.platform;
-  let status={hermes:false,openclaw_sdk:false,openclaw_gateway:false};
-  try{status=await api('/api/onboarding/install-status');}catch(e){}
-
+  // Use already-loaded install_status from onboarding status; fall back to a fresh fetch
+  let status=(ONBOARDING.status||{}).install_status||null;
+  if(!status){
+    try{status=await api('/api/onboarding/install-status');}catch(e){}
+    status=status||{hermes:false,openclaw_sdk:false,openclaw_gateway:false};
+  }
   if(platform==='hermes'){
     _renderJduiHermesInstall(body,status);
   } else {
@@ -576,8 +579,27 @@ function _renderJduiHermesInstall(body,status){
 function _renderJduiOpenClawInstall(body,status){
   const sdkOk=status.openclaw_sdk;
   const gwOk=status.openclaw_gateway;
-  const settings=(ONBOARDING.status||{}).settings||{};
   const savedUrl=((ONBOARDING.status||{}).openclaw_gateway_url)||'ws://127.0.0.1:18789';
+
+  // Both ready — skip straight to next
+  if(sdkOk&&gwOk){
+    body.innerHTML=`<div class="jdui-step">
+      <h3>OpenClaw</h3>
+      <p class="step-desc">Agent 环境已就绪，可以继续配置</p>
+      <div style="background:rgba(78,161,0,0.08);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:12px;margin:20px 0">
+        <span style="font-size:24px">✓</span>
+        <div>
+          <strong style="color:#4EA100">OpenClaw 已检测到</strong>
+          <p style="margin:4px 0 0;font-size:13px;color:rgba(60,60,67,0.7)">SDK 已安装，Gateway 已连接</p>
+        </div>
+      </div>
+      <div class="jdui-step-actions">
+        <button class="jdui-btn-secondary" onclick="_jduiGoStep('platform')">上一步</button>
+        <button class="jdui-btn-primary" onclick="_jduiGoStep('model')">下一步</button>
+      </div>
+    </div>`;
+    return;
+  }
 
   body.innerHTML=`<div class="jdui-step">
     <h3>安装 OpenClaw</h3>
