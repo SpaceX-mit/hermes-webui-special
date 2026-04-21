@@ -40,17 +40,58 @@ pip3 install --break-system-packages \
 
 ### 4. 启动服务器
 
+**本地访问（默认）**
+
 ```bash
 python3 server.py
 ```
 
-服务默认监听 `http://127.0.0.1:8787`。
+服务绑定 `127.0.0.1:8787`，仅本机可访问：`http://127.0.0.1:8787`
 
-如需远程访问，可通过 SSH 隧道：
+---
+
+**局域网 / 外部访问**
+
+```bash
+HERMES_WEBUI_HOST=0.0.0.0 python3 server.py
+```
+
+服务绑定所有网卡，局域网内其他机器通过本机 IP 访问：
+
+```
+http://<本机IP>:8787
+```
+
+查看本机 IP：
+
+```bash
+ip route get 1 | awk '{print $7; exit}'   # Linux
+ipconfig getifaddr en0                     # macOS
+```
+
+建议同时设置访问密码：
+
+```bash
+HERMES_WEBUI_HOST=0.0.0.0 HERMES_WEBUI_PASSWORD=your-secret python3 server.py
+```
+
+后台持久运行：
+
+```bash
+HERMES_WEBUI_HOST=0.0.0.0 nohup python3 server.py > /tmp/hermes-webui.log 2>&1 &
+```
+
+---
+
+**SSH 隧道（不想开放端口时）**
+
+在本地机器执行，将远程服务器的 8787 映射到本地：
 
 ```bash
 ssh -N -L 8787:127.0.0.1:8787 <user>@<your-server>
 ```
+
+然后本地访问 `http://127.0.0.1:8787`。
 
 ## 启动过程中遇到的问题及解决方案
 
