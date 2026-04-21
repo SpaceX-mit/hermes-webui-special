@@ -452,6 +452,17 @@ def apply_onboarding_setup(body: dict) -> dict:
     api_key = str(body.get("api_key") or "").strip()
     base_url = _normalize_base_url(str(body.get("base_url") or ""))
 
+    # Persist user info if provided
+    user_fields = {}
+    if body.get("user_name") is not None:
+        user_fields["user_name"] = str(body["user_name"]).strip()
+    if body.get("user_timezone") is not None:
+        user_fields["user_timezone"] = str(body["user_timezone"]).strip()
+    if body.get("user_notes") is not None:
+        user_fields["user_notes"] = str(body["user_notes"]).strip()
+    if user_fields:
+        save_settings(user_fields)
+
     if provider not in _SUPPORTED_PROVIDER_SETUPS:
         # Unsupported providers (openai-codex, copilot, nous, etc.) are already
         # configured via the CLI. Just mark onboarding as complete and let the
@@ -521,7 +532,65 @@ def apply_onboarding_setup(body: dict) -> dict:
 
 def complete_onboarding() -> dict:
     save_settings({"onboarding_completed": True})
+    _sync_user_md_to_all_agents()
     return get_onboarding_status()
+
+
+def _sync_user_md_to_all_agents() -> None:
+    """Write USER.md with current user info into every OpenClaw agent workspace.
+
+    Also writes memories/USER.md for Hermes agents.
+    Runs best-effort — errors are logged but do not abort onboarding.
+    """
+    settings = load_settings()
+    user_info = {
+        'name': settings.get('user_name') or '',
+        'timezone': settings.get('user_timezone') or '',
+        'notes': settings.get('user_notes') or '',
+    }
+
+    # OpenClaw agents
+    try:
+        from api.employees import _load_employees
+        from api.providers.openclaw_provider import write_user_md_to_openclaw_workspace
+        import os
+        employees = _load_employees().get('employees', [])
+        for emp in employees:
+            if emp.get('agent_provider') == 'openclaw':
+                agent_id = emp.get('profile_name') or emp.get('id')
+                ws = os.path.expanduser(f'~/.openclaw/workspace/{agent_id}')
+                if os.path.isdir(ws):
+                    try:
+                        write_user_md_to_openclaw_workspace(ws, user_info)
+                    except Exception as e:
+                        print(f'[onboarding] USER.md sync failed for {agent_id}: {e}', flush=True)
+    except Exception as e:
+        print(f'[onboarding] OpenClaw USER.md sync error: {e}', flush=True)
+
+    # Hermes agents — write memories/USER.md
+    try:
+        from api.employees import _load_employees, _get_profile_dir
+        employees = _load_employees().get('employees', [])
+        for emp in employees:
+            if emp.get('agent_provider', 'hermes') == 'hermes':
+                profile_name = emp.get('profile_name')
+                if not profile_name:
+                    continue
+                mem_dir = _get_profile_dir(profile_name) / 'memories'
+                if mem_dir.is_dir():
+                    user_md = mem_dir / 'USER.md'
+                    lines = [
+                        '# USER.md - 关于用户\n',
+                        f'- **Name:** {user_info["name"]}',
+                        f'- **Timezone:** {user_info["timezone"]}',
+                        f'- **Notes:** {user_info["notes"]}',
+                    ]
+                    try:
+                        user_md.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+                    except Exception as e:
+                        print(f'[onboarding] Hermes USER.md sync failed for {profile_name}: {e}', flush=True)
+    except Exception as e:
+        print(f'[onboarding] Hermes USER.md sync error: {e}', flush=True)
 
 
 # ── P1: Platform selection & install detection ────────────────────────────────

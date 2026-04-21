@@ -70,6 +70,22 @@ def _write_soul_md(profile_name, content):
     (profile_dir / 'SOUL.md').write_text(content, encoding='utf-8')
 
 
+def _write_identity_md(profile_name, name, description):
+    """Write IDENTITY.md into the profile directory."""
+    profile_dir = _get_profile_dir(profile_name)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    vibe = description if description else '专业、高效的数字员工'
+    lines = [
+        f'# IDENTITY.md - 我是谁\n',
+        f'- **Name:** {name}',
+        f'- **Creature:** AI 数字员工',
+        f'- **Vibe:** {vibe}',
+        f'- **Emoji:** 🤖',
+        f'- **Avatar:**',
+    ]
+    (profile_dir / 'IDENTITY.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
 def _update_profile_toolsets(profile_name, capabilities):
     """Update platform_toolsets.cli in the profile's config.yaml."""
     profile_dir = _get_profile_dir(profile_name)
@@ -164,6 +180,7 @@ def create_employee(body):
         try:
             create_profile_api(profile_name, clone_from='default', clone_config=True)
             _write_soul_md(profile_name, _generate_soul_md(name, description, traits))
+            _write_identity_md(profile_name, name, description)
             _update_profile_toolsets(profile_name, capabilities)
         except Exception:
             pass
@@ -219,6 +236,7 @@ def update_employee(emp_id, body):
                                     emp.get('traits', []),
                                 ),
                             )
+                            _write_identity_md(profile_name, emp['name'], emp.get('description', ''))
                         if caps_changed:
                             _update_profile_toolsets(profile_name, emp.get('capabilities', {}))
                     except Exception:

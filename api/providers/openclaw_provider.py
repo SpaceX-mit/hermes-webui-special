@@ -169,6 +169,78 @@ class _GatewayConnection:
 _gw_conn = _GatewayConnection()
 
 
+# ── Workspace file helpers ─────────────────────────────────────────────────
+
+
+def _write_openclaw_workspace_files(workspace: str, name: str, description: str,
+                                     traits: list, capabilities: dict) -> None:
+    """Write customized SOUL.md and IDENTITY.md into an agent workspace.
+
+    Called after Gateway creates the agent (which generates generic templates).
+    Overwrites only the files that benefit from employee-specific content.
+    """
+    import os
+    ws = os.path.expanduser(workspace)
+
+    # SOUL.md — personality and work principles
+    soul_lines = [f'# SOUL.md - {name} 的灵魂\n']
+    soul_lines.append(f'你是 {name}。' + (description if description else ''))
+    if traits:
+        soul_lines.append('\n## 性格特质')
+        for t in traits:
+            soul_lines.append(f'- {t}')
+    soul_lines.append('\n## 工作准则')
+    soul_lines.append('- 保持专业、高效的工作态度')
+    soul_lines.append('- 根据上下文灵活调整沟通风格')
+    soul_lines.append('- 私密信息严格保密，不对外泄露')
+    soul_lines.append('\n## 连续性')
+    soul_lines.append('每次会话开始时读取 SOUL.md、IDENTITY.md、USER.md 以恢复上下文。')
+    soul_lines.append('重要信息写入 memory/ 目录，不依赖"脑内记忆"。')
+    with open(os.path.join(ws, 'SOUL.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(soul_lines) + '\n')
+
+    # IDENTITY.md — name and role
+    vibe = description if description else '专业、高效的数字员工'
+    identity_lines = [
+        f'# IDENTITY.md - 我是谁\n',
+        f'- **Name:** {name}',
+        f'- **Creature:** AI 数字员工',
+        f'- **Vibe:** {vibe}',
+        f'- **Emoji:** 🤖',
+        f'- **Avatar:**',
+        '',
+        '---',
+        '',
+        '这不只是元数据，这是你身份的起点。',
+    ]
+    with open(os.path.join(ws, 'IDENTITY.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(identity_lines) + '\n')
+
+
+def write_user_md_to_openclaw_workspace(workspace: str, user_info: dict) -> None:
+    """Write USER.md with user info into an agent workspace.
+
+    user_info keys: name, timezone, notes (all optional).
+    """
+    import os
+    ws = os.path.expanduser(workspace)
+    name = user_info.get('name') or ''
+    timezone = user_info.get('timezone') or ''
+    notes = user_info.get('notes') or ''
+    lines = [
+        '# USER.md - 关于你的用户\n',
+        f'- **Name:** {name}',
+        f'- **Timezone:** {timezone}',
+        f'- **Notes:** {notes}',
+        '',
+        '## 背景',
+        '',
+        '（随着对话积累，在这里记录用户的偏好、项目、习惯等。）',
+    ]
+    with open(os.path.join(ws, 'USER.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
 # ── Gateway agent management ───────────────────────────────────────────────
 
 
@@ -192,7 +264,7 @@ def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
             raise
 
     try:
-        return _gw_conn.run(_create())
+        _gw_conn.run(_create())
     except Exception:
         # Fallback: direct asyncio.run if pool fails
         async def _fallback():
@@ -205,13 +277,16 @@ def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
                 result = client.create_agent(config, workspace=agent_workspace)
                 if asyncio.iscoroutine(result):
                     result = await result
-                return {'agent_id': agent_id, 'created': True}
             finally:
                 if asyncio.iscoroutinefunction(client.close):
                     await client.close()
                 else:
                     client.close()
-        return asyncio.run(_fallback())
+        asyncio.run(_fallback())
+
+    # Write customized workspace files (overwrites generic Gateway templates)
+    _write_openclaw_workspace_files(agent_workspace, name, description or '', traits or [], capabilities or {})
+    return {'agent_id': agent_id, 'created': True}
 
 
 def update_openclaw_agent_on_gateway(agent_id, name, description, traits, capabilities):
@@ -220,7 +295,9 @@ def update_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
     The SDK has no update_agent method, so we delete and recreate with the
     new AgentConfig. This preserves the agent_id but resets memory/sessions.
     """
+    import os
     cfg = _get_openclaw_config()
+    agent_workspace = os.path.expanduser(f'~/.openclaw/workspace/{agent_id}')
 
     async def _update():
         client, _ = _gw_conn.get(cfg)
@@ -234,7 +311,7 @@ def update_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
                 pass
             # Recreate with new config
             config = _build_agent_config(agent_id, name, description, traits, capabilities)
-            result = client.create_agent(config)
+            result = client.create_agent(config, workspace=agent_workspace)
             if asyncio.iscoroutine(result):
                 result = await result
             return {'agent_id': agent_id, 'updated': True}
@@ -243,10 +320,14 @@ def update_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
             raise
 
     try:
-        return _gw_conn.run(_update())
+        _gw_conn.run(_update())
     except Exception as e:
         print(f'[openclaw] update_agent failed: {e}', flush=True)
-        return None
+
+    # Re-write workspace files with updated employee info
+    os.makedirs(agent_workspace, exist_ok=True)
+    _write_openclaw_workspace_files(agent_workspace, name, description or '', traits or [], capabilities or {})
+    return {'agent_id': agent_id, 'updated': True}
 
 
 def delete_openclaw_agent_on_gateway(agent_id):
