@@ -174,13 +174,16 @@ _gw_conn = _GatewayConnection()
 
 def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabilities):
     """Create a new agent on the OpenClaw Gateway."""
+    import os
     cfg = _get_openclaw_config()
     config = _build_agent_config(agent_id, name, description, traits, capabilities)
+    agent_workspace = os.path.expanduser(f'~/.openclaw/workspace/{agent_id}')
+    os.makedirs(agent_workspace, exist_ok=True)
 
     async def _create():
         client, _ = _gw_conn.get(cfg)
         try:
-            result = client.create_agent(config)
+            result = client.create_agent(config, workspace=agent_workspace)
             if asyncio.iscoroutine(result):
                 result = await result
             return {'agent_id': agent_id, 'created': True}
@@ -199,7 +202,7 @@ def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
                 api_key=cfg['api_key'] or None,
             )
             try:
-                result = client.create_agent(config)
+                result = client.create_agent(config, workspace=agent_workspace)
                 if asyncio.iscoroutine(result):
                     result = await result
                 return {'agent_id': agent_id, 'created': True}
@@ -643,7 +646,10 @@ def create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabi
                 name=agent_id,  # Gateway agent name must be ASCII-safe
                 system_prompt=system_prompt,
             )
-            result = client.create_agent(config)
+            import os
+            agent_workspace = os.path.expanduser(f'~/.openclaw/workspace/{agent_id}')
+            os.makedirs(agent_workspace, exist_ok=True)
+            result = client.create_agent(config, workspace=agent_workspace)
             if asyncio.iscoroutine(result):
                 result = await result
             return {'agent_id': agent_id, 'created': True}
