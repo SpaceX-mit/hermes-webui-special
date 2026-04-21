@@ -298,8 +298,6 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                     agent.ephemeral_system_prompt = _personality_prompt
             if not _is_hermes:
                 # Non-Hermes provider: use IAgent.run() standard interface
-                # Pass openclaw_session_key so OpenClawAgent can use Gateway session
-                # for multi-turn context (P2 improvement).
                 _run_kwargs = dict(
                     user_message=workspace_ctx + msg_text,
                     system_message=workspace_system_msg,
@@ -307,6 +305,9 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                     session_id=session_id,
                     personality=_personality_prompt,
                 )
+                _openclaw_session_key = getattr(s, 'openclaw_session_key', None)
+                if _openclaw_session_key:
+                    _run_kwargs['openclaw_session_key'] = _openclaw_session_key
                 _agent_result = _iagent.run(**_run_kwargs)
                 s.messages = _agent_result.messages or s.messages
                 # Build usage and timestamps, then jump to done

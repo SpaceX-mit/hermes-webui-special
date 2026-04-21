@@ -738,6 +738,7 @@ class OpenClawProvider(IAgentProvider):
         # For OpenClaw, resolve the agent_id from the session's employee profile
         # The model param is the LLM model name, but we need the OpenClaw agent_id
         openclaw_agent_id = model  # default: use model as agent_id
+        openclaw_session_key = None
         try:
             from api.employees import list_employees
             from api.models import get_session
@@ -748,6 +749,8 @@ class OpenClawProvider(IAgentProvider):
                     if emp.get('profile_name') == s.profile and emp.get('agent_provider') == 'openclaw':
                         openclaw_agent_id = emp['profile_name']
                         break
+            if s and hasattr(s, 'openclaw_session_key') and s.openclaw_session_key:
+                openclaw_session_key = s.openclaw_session_key
         except Exception:
             pass
         return OpenClawAgent(
@@ -758,6 +761,7 @@ class OpenClawProvider(IAgentProvider):
             session_id=session_id,
             on_token=on_token,
             on_tool=on_tool,
+            openclaw_session_key=openclaw_session_key,
         )
 
 
@@ -765,7 +769,7 @@ class OpenClawAgent(IAgent):
     """Wraps openclaw-sdk async Agent via asyncio.run()."""
 
     def __init__(self, *, model, openclaw_agent_id=None, gateway_url, gateway_key,
-                 session_id, on_token, on_tool):
+                 session_id, on_token, on_tool, openclaw_session_key=None):
         self._model = model
         self._openclaw_agent_id = openclaw_agent_id or model
         self._gateway_url = gateway_url
@@ -773,11 +777,16 @@ class OpenClawAgent(IAgent):
         self._session_id = session_id
         self._on_token = on_token
         self._on_tool = on_tool
+        self._openclaw_session_key = openclaw_session_key
         self._usage = AgentUsage()
         self._interrupted = False
 
     def run(self, user_message, system_message, conversation_history,
-            session_id, personality=None):
+            session_id, personality=None, **kwargs):
+
+        # Allow caller to override session key (e.g. from streaming.py)
+        if kwargs.get('openclaw_session_key'):
+            self._openclaw_session_key = kwargs['openclaw_session_key']
 
         # Strip [Workspace: ...] prefix for display, keep for agent
         display_message = user_message
@@ -803,6 +812,24 @@ class OpenClawAgent(IAgent):
             )
             try:
                 agent = client.get_agent(self._openclaw_agent_id)
+
+                # Use Gateway session for multi-turn context when available
+                if self._openclaw_session_key:
+                    try:
+                        async with agent.conversation(self._openclaw_session_key) as convo:
+                            result = await convo.say(full_message)
+                            if hasattr(result, 'content') and result.content:
+                                self._on_token(result.content)
+                                result_text = result.content
+                            if hasattr(result, 'token_usage') and result.token_usage:
+                                tu = result.token_usage
+                                usage = AgentUsage(
+                                    input_tokens=getattr(tu, 'input', 0) or 0,
+                                    output_tokens=getattr(tu, 'output', 0) or 0,
+                                )
+                        return
+                    except Exception as _e:
+                        print(f'[openclaw] session run failed, falling back to execute_stream: {_e}', flush=True)
 
                 stream = await agent.execute_stream(full_message)
                 async for event in stream:

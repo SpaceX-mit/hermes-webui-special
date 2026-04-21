@@ -12,6 +12,17 @@
 
 ---
 
+## OpenClaw P2 功能实现记录
+
+| 功能 | 状态 | 实现位置 | 说明 |
+|------|------|----------|------|
+| Gateway Session 多轮上下文 | ✅ 已完成 | `openclaw_provider.py` `OpenClawAgent.run()` | 激活员工时后台创建 Gateway Session，后续对话通过 `agent.conversation(session_key)` 复用，失败自动降级到 `execute_stream` |
+| 通过 Gateway 写入 LLM 配置 | ✅ 已完成 | `onboarding.py` `apply_openclaw_llm_config()` + `routes.py` `/api/onboarding/openclaw-llm` | 向导模型配置步骤通过 `config.patch` RPC 写入 Gateway，前后端已联通 |
+| `run()` 传递 `openclaw_session_key` | ✅ 已修复 | `streaming.py` → `OpenClawAgent.run(**kwargs)` | 原 `run()` 签名缺少该参数导致报错，已补全 `**kwargs` 接收并在方法内应用 |
+| 引导安装步骤跳过检测 | ✅ 已修复 | `onboarding.js` `_renderJduiInstall` / `_renderJduiOpenClawInstall` | 已安装时直接显示就绪卡片，不再重复请求 install-status 接口 |
+
+---
+
 ## 1. 认证（3 个接口）
 
 | 方法 | 路径 | 状态 | 说明 |
