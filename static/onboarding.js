@@ -888,7 +888,14 @@ function _renderJduiLoading(body){
     try{
       if(typeof _saveEmployee==='function') await _saveEmployee({name:JDUI_WIZ.employeeName,avatar_index:JDUI_WIZ.avatarIndex,description:JDUI_WIZ.description,traits:JDUI_WIZ.traits,capabilities:JDUI_WIZ.capabilities});
       await _finishOnboarding();
-    }catch(e){console.warn('JDUI finish error',e);$('onboardingOverlay').style.display='none';ONBOARDING.active=false;}
+    }catch(e){
+      console.warn('JDUI finish error',e);
+      // Even if setup steps fail, always mark onboarding as completed so the
+      // wizard doesn't reappear on next page load.
+      try{await api('/api/onboarding/complete',{method:'POST',body:'{}'});}catch(_){}
+      $('onboardingOverlay').style.display='none';
+      ONBOARDING.active=false;
+    }
     if(typeof _applyJduiLayout==='function')_applyJduiLayout();
   },3200);
 }
