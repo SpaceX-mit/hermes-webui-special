@@ -1697,6 +1697,19 @@ async function _loadEmployeePanel() {
           // Load the most recent session
           await _activateEmployee(emp.id);
           await loadSession(sessions[0].session_id);
+          // Patch workspace to match the employee's profile (old sessions may have stale workspace)
+          if (emp.profile_name && S.session) {
+            try {
+              const wsData = await api(`/api/workspaces?profile=${encodeURIComponent(emp.profile_name)}`);
+              if (wsData.last && S.session.workspace !== wsData.last) {
+                await api('/api/session/update', {
+                  method: 'POST',
+                  body: JSON.stringify({ session_id: S.session.session_id, workspace: wsData.last }),
+                });
+                S.session.workspace = wsData.last;
+              }
+            } catch (e) { /* ignore */ }
+          }
         } else {
           // No existing sessions — activate and create a fresh one
           await _activateEmployee(emp.id);

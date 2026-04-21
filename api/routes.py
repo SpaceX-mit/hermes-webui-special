@@ -342,6 +342,11 @@ def handle_get(handler, parsed) -> bool:
         return _handle_session_export(handler, parsed)
 
     if parsed.path == "/api/workspaces":
+        _profile_param = parsed_qs.get("profile", [""])[0].strip()
+        if _profile_param:
+            from api.workspace import get_workspace_for_profile
+            _ws = get_workspace_for_profile(_profile_param)
+            return j(handler, {"workspaces": [{"path": _ws, "name": "Home"}], "last": _ws})
         return j(
             handler, {"workspaces": load_workspaces(), "last": get_last_workspace()}
         )
@@ -648,9 +653,13 @@ def handle_post(handler, parsed) -> bool:
                         if not body.get("workspace") and _emp.get('agent_provider', 'hermes') == 'hermes':
                             try:
                                 from api.workspace import get_workspace_for_profile
-                                s.workspace = get_workspace_for_profile(_pname)
-                            except Exception:
-                                pass
+                                resolved = get_workspace_for_profile(_pname)
+                                print(f'[session/new] employee={_emp_id} profile={_pname} workspace={resolved}', flush=True)
+                                s.workspace = resolved
+                            except Exception as _we:
+                                print(f'[session/new] workspace resolve failed: {_we}', flush=True)
+                        else:
+                            print(f'[session/new] skipped workspace resolve: body_ws={body.get("workspace")!r} provider={_emp.get("agent_provider")!r}', flush=True)
                         # P2: For OpenClaw employees, create a Gateway session in the
                         # background so it doesn't block the HTTP response.
                         if _emp.get('agent_provider') == 'openclaw':
@@ -677,8 +686,10 @@ def handle_post(handler, parsed) -> bool:
                             ).start()
                         s.save()
                         break
-            except Exception:
-                pass
+            except Exception as _outer_e:
+                print(f'[session/new] outer exception: {_outer_e}', flush=True)
+                import traceback; traceback.print_exc()
+        print(f'[session/new] final workspace={s.workspace!r} profile={s.profile!r}', flush=True)
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
     if parsed.path == "/api/sessions/cleanup":
