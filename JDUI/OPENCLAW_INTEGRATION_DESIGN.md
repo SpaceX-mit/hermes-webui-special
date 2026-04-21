@@ -254,7 +254,44 @@ create_openclaw_agent_on_gateway(profile_name, ...)
 
 因此 JDUI 的 `profile_name` 与 Gateway 的 `agent_id` 是同一个值，格式固定为 `emp-{12位hex}`。
 
-### 11.2 Agent 工作目录
+### 11.2 Hermes Agent 工作目录
+
+每个 Hermes agent 使用自己 profile 下的 `workspace/` 子目录作为工作目录，与其他 agent 完全隔离。
+
+**规范路径**：`~/.hermes/profiles/<profile_name>/workspace/`
+
+例如：`/home/duancheng/.hermes/profiles/emp-c5809d2d1039/workspace/`
+
+#### 设计原因
+
+- **天然隔离**：每个 agent 的文件、草稿、临时产物互不干扰
+- **已自动存在**：profile 创建时 `workspace/` 目录就自动生成，无需额外创建
+- **生命周期一致**：删除员工时 profile 目录整体删除，workspace 随之清理，不留垃圾
+- **与 OpenClaw 对称**：OpenClaw 用 `~/.openclaw/workspace/emp-xxx/`，Hermes 用 `~/.hermes/profiles/emp-xxx/workspace/`
+
+#### 实现方式
+
+`create_employee()` 在创建 Hermes profile 后调用 `_set_profile_workspace()`，将路径写入 `config.yaml` 的 `workspace` 键：
+
+```python
+ws_path = _get_profile_dir(profile_name) / 'workspace'
+ws_path.mkdir(exist_ok=True)
+_set_profile_workspace(profile_name, str(ws_path))
+```
+
+`api/workspace.py` 的 `_profile_default_workspace()` 优先读取 `config.yaml` 的 `workspace` 键，因此写入后立即生效，无需修改 workspace 逻辑。
+
+#### webui workspace 决定顺序
+
+```
+1. 会话中显式设置的路径 (s.workspace)
+2. profile 的 webui_state/last_workspace.txt（用户手动切换后记录）
+3. profile 的 config.yaml → workspace 键  ← 创建员工时写入此处
+4. profile 的 config.yaml → terminal.cwd（"." 视为无效，跳过）
+5. 全局 fallback：~/.hermes/webui/workspace/
+```
+
+### 11.3 OpenClaw Agent 工作目录
 
 每个 OpenClaw agent 有独立的工作目录，用于存放 `SOUL.md`、`IDENTITY.md`、`memory/` 等文件。
 
@@ -272,7 +309,25 @@ result = client.create_agent(config, workspace=agent_workspace)
 
 **注意**：若不传 `workspace`，SDK 默认使用 `"."` 即进程当前目录。server.py 从 `/home/duancheng` 启动，会导致所有 agent 文件写入 home 目录，污染用户主目录。
 
-### 11.3 目录结构
+### 11.4 目录结构对比
+
+**Hermes：**
+
+```
+~/.hermes/profiles/
+└── emp-c5809d2d1039/
+    ├── config.yaml          # workspace: /home/.../emp-xxx/workspace
+    ├── SOUL.md              # 性格与行为准则
+    ├── IDENTITY.md          # 名字、身份
+    ├── memories/
+    │   ├── MEMORY.md
+    │   └── USER.md          # 用户信息（引导完成时写入）
+    ├── workspace/           # ← agent 工作目录（隔离）
+    └── webui_state/
+        └── last_workspace.txt
+```
+
+**OpenClaw：**
 
 ```
 ~/.openclaw/
