@@ -290,4 +290,160 @@ result = client.create_agent(config, workspace=agent_workspace)
     └── emp-c5809d2d1039/
         └── agent/             # Gateway 内部 agent 状态
 ```
-6. 停止 OpenClaw Gateway → 发送消息 → 显示连接错误提示
+
+---
+
+## 12. Agent Workspace 文件初始化现状与改进方案
+
+### 12.1 现状分析
+
+#### Hermes agent（创建员工时）
+
+`api/employees.py:create_employee()` 写入：
+
+| 文件 | 内容来源 | 代码位置 |
+|------|----------|----------|
+| `SOUL.md` | `_generate_soul_md(name, description, traits)` 生成 | `employees.py:54-70` |
+| `config.yaml` | 克隆自 default profile | `profiles.py:create_profile_api()` |
+| `memories/MEMORY.md` | 空文件 | profile 创建时自动生成 |
+| `memories/USER.md` | 空文件 | profile 创建时自动生成 |
+
+**缺失**：IDENTITY.md、BOOTSTRAP.md、HEARTBEAT.md、AGENTS.md、TOOLS.md 均未生成。
+
+#### OpenClaw agent（创建员工时）
+
+`create_openclaw_agent_on_gateway()` 只做了：
+1. 创建 `~/.openclaw/workspace/<agent_id>/` 目录
+2. 调用 `client.create_agent(config, workspace=...)` 注册到 Gateway
+
+Gateway 自动生成 7 个通用模板文件，但**内容与员工无关**，name/description/traits 没有写入：
+
+| 文件 | Gateway 默认内容 | 问题 |
+|------|-----------------|------|
+| `SOUL.md` | 通用行为准则模板 | 未包含员工性格特质和描述 |
+| `IDENTITY.md` | 空白模板，Name 字段为空 | 未填入员工姓名 |
+| `USER.md` | 空白模板 | 未填入用户信息 |
+| `TOOLS.md` | 通用工具配置说明 | 未根据员工能力定制 |
+| `AGENTS.md` | 通用工作空间指南 | 可保持通用 |
+| `BOOTSTRAP.md` | 通用首次启动指南 | 可保持通用 |
+| `HEARTBEAT.md` | 空（无心跳任务） | 可保持空 |
+
+#### 引导阶段（Onboarding）
+
+目前对 OpenClaw workspace 文件**没有任何操作**。用户在引导时填写的信息（姓名、时区等）不会写入任何 agent 的 USER.md。
+
+---
+
+### 12.2 改进方案
+
+#### 方案 A：创建员工时写入定制文件（OpenClaw）
+
+在 `create_openclaw_agent_on_gateway()` 完成 Gateway 注册后，立即写入定制内容：
+
+```
+create_employee()
+    └→ create_openclaw_agent_on_gateway(agent_id, name, description, traits, capabilities)
+           ├→ client.create_agent(config, workspace=agent_workspace)   # Gateway 生成模板
+           └→ _write_openclaw_workspace_files(agent_workspace, name, description, traits, capabilities)
+                  ├→ SOUL.md      ← 覆盖：写入员工性格特质
+                  ├→ IDENTITY.md  ← 覆盖：写入员工姓名
+                  └→ TOOLS.md     ← 覆盖：根据 capabilities 写入工具配置
+```
+
+**SOUL.md 定制内容**（参考 Hermes 的 `_generate_soul_md`）：
+```markdown
+# SOUL.md - {name} 的灵魂
+
+你是 {name}。{description}
+
+## 性格特质
+- {trait1}
+- {trait2}
+
+## 工作准则
+- 保持专业、高效的工作态度
+- 根据上下文灵活调整沟通风格
+```
+
+**IDENTITY.md 定制内容**：
+```markdown
+# IDENTITY.md - 我是谁
+
+- **Name:** {name}
+- **Creature:** AI 数字员工
+- **Vibe:** {description}
+- **Emoji:** 🤖
+```
+
+#### 方案 B：引导阶段写入 USER.md
+
+在 `onboarding.py:complete_onboarding()` 或 `apply_onboarding_setup()` 中，将用户信息写入所有已存在的 agent workspace：
+
+```
+complete_onboarding(user_name, timezone, ...)
+    └→ _sync_user_md_to_all_agents(user_name, timezone)
+           ├→ 遍历 employees.json 中所有 openclaw 员工
+           └→ 写入 ~/.openclaw/workspace/<agent_id>/USER.md
+```
+
+**USER.md 内容**：
+```markdown
+# USER.md - 关于你的用户
+
+- **Name:** {user_name}
+- **Timezone:** {timezone}
+- **Notes:** {notes}
+```
+
+#### 方案 C：Hermes agent 补全缺失文件
+
+在 `create_employee()` 的 Hermes 分支中，补充写入目前缺失的文件：
+
+| 文件 | 内容 | 写入时机 |
+|------|------|----------|
+| `IDENTITY.md` | 员工姓名、描述 | 创建员工时 |
+| `memories/USER.md` | 用户信息（引导阶段填写的） | 创建员工时 + 引导完成时同步 |
+
+---
+
+### 12.3 实现计划
+
+#### P1 — 创建员工时定制 OpenClaw workspace 文件
+
+**文件**：`api/providers/openclaw_provider.py`
+
+新增函数 `_write_openclaw_workspace_files(workspace, name, description, traits, capabilities)`，在 `create_openclaw_agent_on_gateway()` 的后台线程中调用（Gateway 创建完成后执行）。
+
+覆盖写入：`SOUL.md`、`IDENTITY.md`。根据 capabilities 定制 `TOOLS.md`（如有 search/memory 能力则注明）。
+
+**文件**：`api/employees.py`
+
+无需改动，OpenClaw 创建逻辑已在后台线程中调用 `create_openclaw_agent_on_gateway`。
+
+#### P2 — 引导阶段同步 USER.md
+
+**文件**：`api/onboarding.py`
+
+在 `complete_onboarding()` 中新增 `_sync_user_md()` 调用，遍历所有 openclaw 员工写入 USER.md。
+
+引导阶段需要收集的用户信息字段：姓名（`user_name`）、时区（`timezone`）。这些字段目前引导流程中未收集，需要在前端引导步骤中增加。
+
+#### P3 — Hermes agent 补全 IDENTITY.md
+
+**文件**：`api/employees.py`
+
+在 `_write_soul_md()` 调用之后，新增 `_write_identity_md()` 写入员工姓名和描述。
+
+---
+
+### 12.4 各文件定制策略汇总
+
+| 文件 | Hermes 现状 | OpenClaw 现状 | 改进后（两者对齐） |
+|------|------------|--------------|------------------|
+| `SOUL.md` | ✅ 已定制（name/traits） | ⚠️ 通用模板 | ✅ 写入 name/description/traits |
+| `IDENTITY.md` | ❌ 未生成 | ⚠️ 空白模板 | ✅ 写入 name/description |
+| `USER.md` | ⚠️ 空文件 | ⚠️ 空白模板 | ✅ 引导完成时写入用户信息 |
+| `TOOLS.md` | ❌ 不适用 | ⚠️ 通用模板 | 🔲 可选：根据 capabilities 定制 |
+| `AGENTS.md` | ❌ 不适用 | ✅ 通用即可 | 保持通用 |
+| `BOOTSTRAP.md` | ❌ 不适用 | ✅ 通用即可 | 保持通用 |
+| `HEARTBEAT.md` | ❌ 不适用 | ✅ 空即可 | 保持空 |
