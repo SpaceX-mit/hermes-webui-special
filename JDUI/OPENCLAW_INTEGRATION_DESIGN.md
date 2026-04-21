@@ -233,4 +233,61 @@ else:
 3. 创建员工 → Agent 平台选择 "OpenClaw" → 保存
 4. 切换到该员工 → 发送消息 → 收到流式响应
 5. 切换回 Hermes 员工 → 聊天正常（无回归）
+
+## 11. Agent ID 与工作目录规范
+
+### 11.1 Agent ID 的生成
+
+OpenClaw Gateway 上的 agent ID **由 JDUI 生成**，Gateway 本身不分配 ID。
+
+生成逻辑在 `api/employees.py` 的 `create_employee()`：
+
+```python
+emp_id = uuid.uuid4().hex[:12]          # 12 位随机 hex，如 "c5809d2d1039"
+profile_name = f'emp-{emp_id}'          # "emp-c5809d2d1039"
+
+# profile_name 同时作为：
+# - JDUI employees.json 中的 profile_name 字段
+# - OpenClaw Gateway 上的 agent_id
+create_openclaw_agent_on_gateway(profile_name, ...)
+```
+
+因此 JDUI 的 `profile_name` 与 Gateway 的 `agent_id` 是同一个值，格式固定为 `emp-{12位hex}`。
+
+### 11.2 Agent 工作目录
+
+每个 OpenClaw agent 有独立的工作目录，用于存放 `SOUL.md`、`IDENTITY.md`、`memory/` 等文件。
+
+**规范路径**：`~/.openclaw/workspace/<agent_id>/`
+
+例如：`/home/duancheng/.openclaw/workspace/emp-c5809d2d1039/`
+
+创建 agent 时由 `create_openclaw_agent_on_gateway()` 自动创建该目录并传给 SDK：
+
+```python
+agent_workspace = os.path.expanduser(f'~/.openclaw/workspace/{agent_id}')
+os.makedirs(agent_workspace, exist_ok=True)
+result = client.create_agent(config, workspace=agent_workspace)
+```
+
+**注意**：若不传 `workspace`，SDK 默认使用 `"."` 即进程当前目录。server.py 从 `/home/duancheng` 启动，会导致所有 agent 文件写入 home 目录，污染用户主目录。
+
+### 11.3 目录结构
+
+```
+~/.openclaw/
+├── openclaw.json              # Gateway 全局配置，含 agents.list
+├── workspace/
+│   ├── emp-c5809d2d1039/      # 每个 OpenClaw 员工独立工作目录
+│   │   ├── SOUL.md            # 性格与行为准则
+│   │   ├── IDENTITY.md        # 名字、身份
+│   │   ├── USER.md            # 用户信息
+│   │   ├── BOOTSTRAP.md       # 首次启动指南
+│   │   └── memory/            # 日常记忆
+│   └── emp-8b46868528ea/
+│       └── ...
+└── agents/
+    └── emp-c5809d2d1039/
+        └── agent/             # Gateway 内部 agent 状态
+```
 6. 停止 OpenClaw Gateway → 发送消息 → 显示连接错误提示
