@@ -262,6 +262,18 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
 
             # Prepend workspace context so the agent always knows which directory
             # to use for file operations, regardless of session age or AGENTS.md defaults.
+            # If the session workspace is the global fallback and the session has a profile,
+            # resolve the correct workspace from the profile config.
+            _global_fallback_ws = str((Path.home() / '.hermes' / 'webui' / 'workspace'))
+            if s.workspace == _global_fallback_ws and getattr(s, 'profile', None):
+                try:
+                    from api.workspace import get_workspace_for_profile as _gwfp
+                    _resolved_ws = _gwfp(s.profile)
+                    if _resolved_ws != _global_fallback_ws:
+                        s.workspace = _resolved_ws
+                        s.save()
+                except Exception:
+                    pass
             workspace_ctx = f"[Workspace: {s.workspace}]\n"
             workspace_system_msg = (
                 f"Active workspace at session start: {s.workspace}\n"
