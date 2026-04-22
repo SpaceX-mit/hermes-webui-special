@@ -72,3 +72,13 @@ def auto_install_agent_deps() -> bool:
     except Exception as e:
         print(f'[!!] Auto-install error: {e}', flush=True)
         return False
+
+
+def start_file_watcher() -> None:
+    """Start the sysfiles watchdog after server is fully initialized."""
+    try:
+        from api.sysfiles import start_file_watcher as _start
+        _start()
+        print('[ok] File watcher started (auto-versioning enabled).', flush=True)
+    except Exception as e:
+        print(f'[!!] File watcher failed to start: {e}', flush=True)

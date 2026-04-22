@@ -12,7 +12,7 @@ from api.auth import check_auth
 from api.config import HOST, PORT, STATE_DIR, SESSION_DIR, DEFAULT_WORKSPACE
 from api.helpers import j
 from api.routes import handle_get, handle_post
-from api.startup import auto_install_agent_deps, fix_credential_permissions
+from api.startup import auto_install_agent_deps, fix_credential_permissions, start_file_watcher
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -126,6 +126,9 @@ def main() -> None:
         print(f'[!!] WARNING: Gateway watcher failed to start: {e}', flush=True)
 
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+
+    # Start file watcher for auto-versioning
+    start_file_watcher()
 
     # ── TLS/HTTPS setup (optional) ─────────────────────────────────────────
     from api.config import TLS_ENABLED, TLS_CERT, TLS_KEY

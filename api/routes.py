@@ -342,7 +342,7 @@ def handle_get(handler, parsed) -> bool:
         return _handle_session_export(handler, parsed)
 
     if parsed.path == "/api/workspaces":
-        _profile_param = parsed_qs.get("profile", [""])[0].strip()
+        _profile_param = parse_qs(parsed.query).get("profile", [""])[0].strip()
         if _profile_param:
             from api.workspace import get_workspace_for_profile
             _ws = get_workspace_for_profile(_profile_param)
@@ -481,6 +481,12 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/file/raw":
         return _handle_file_raw(handler, parsed)
 
+    if parsed.path == "/api/file/pptx_html":
+        return _handle_file_pptx_html(handler, parsed)
+
+    if parsed.path == "/api/file/docx_html":
+        return _handle_file_docx_html(handler, parsed)
+
     if parsed.path == "/api/file":
         return _handle_file_read(handler, parsed)
 
@@ -618,6 +624,94 @@ def handle_get(handler, parsed) -> bool:
         from api.agent_manager import AgentManager
         return j(handler, {"providers": AgentManager.list_providers()})
 
+    # ── System file manager ────────────────────────────────────────────────
+    if parsed.path == "/api/sysfile/roots":
+        from api.sysfiles import get_roots
+        return j(handler, {"roots": get_roots()})
+
+    if parsed.path.startswith("/api/sysfile/"):
+        from urllib.parse import parse_qs as _pqs
+        qs = _pqs(parsed.query)
+
+        if parsed.path == "/api/sysfile/list":
+            from api.sysfiles import sf_list_dir
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', ['.'])[0]
+            try:
+                return j(handler, {"entries": sf_list_dir(root_id, rel)})
+            except (ValueError, FileNotFoundError) as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/read":
+            from api.sysfiles import sf_read_file
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', [''])[0]
+            try:
+                return j(handler, sf_read_file(root_id, rel))
+            except (ValueError, FileNotFoundError) as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/raw":
+            from api.sysfiles import sf_resolve_raw
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', [''])[0]
+            download = qs.get('download', ['0'])[0] == '1'
+            try:
+                fpath = sf_resolve_raw(root_id, rel)
+                if not fpath.is_file():
+                    return j(handler, {"error": "Not a file"}, status=404)
+                data = fpath.read_bytes()
+                import mimetypes
+                ct = mimetypes.guess_type(fpath.name)[0] or 'application/octet-stream'
+                handler.send_response(200)
+                handler.send_header('Content-Type', ct)
+                handler.send_header('Content-Length', str(len(data)))
+                if download:
+                    handler.send_header('Content-Disposition', f'attachment; filename="{fpath.name}"')
+                handler.end_headers()
+                handler.wfile.write(data)
+                return True
+            except (ValueError, FileNotFoundError) as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/pptx_html":
+            from api.sysfiles import sf_resolve_raw
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', [''])[0]
+            try:
+                fpath = sf_resolve_raw(root_id, rel)
+                html_content = _pptx_to_html(fpath)
+                return j(handler, {"html": html_content})
+            except Exception as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/versions":
+            from api.sysfiles import sf_list_versions
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', [''])[0]
+            try:
+                return j(handler, {"versions": sf_list_versions(root_id, rel)})
+            except ValueError as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/version/read":
+            from api.sysfiles import sf_read_version
+            root_id = qs.get('root', [''])[0]
+            rel = qs.get('path', [''])[0]
+            version_id = qs.get('version_id', [''])[0]
+            try:
+                return j(handler, sf_read_version(root_id, rel, version_id))
+            except (ValueError, FileNotFoundError) as e:
+                return j(handler, {"error": str(e)}, status=400)
+
+        if parsed.path == "/api/sysfile/trash/list":
+            from api.sysfiles import sf_list_trash
+            root_id = qs.get('root', [''])[0]
+            try:
+                return j(handler, {"items": sf_list_trash(root_id)})
+            except ValueError as e:
+                return j(handler, {"error": str(e)}, status=400)
+
     return False  # 404
 
 
@@ -632,6 +726,23 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/upload":
         return handle_upload(handler)
+
+    if parsed.path == "/api/sysfile/upload":
+        from api.sysfiles import sf_save_upload
+        from api.upload import parse_multipart
+        try:
+            ct = handler.headers.get('Content-Type', '')
+            cl = int(handler.headers.get('Content-Length', 0))
+            fields, files = parse_multipart(handler.rfile, ct, cl)
+            root_id = fields.get('root', '')
+            rel_dir = fields.get('dir', '.') or '.'
+            if 'file' not in files:
+                return j(handler, {"error": "No file"}, status=400)
+            filename, data = files['file']
+            saved = sf_save_upload(root_id, rel_dir, filename, data)
+            return j(handler, {"ok": True, "path": saved})
+        except (ValueError, Exception) as e:
+            return j(handler, {"error": str(e)}, status=400)
 
     body = read_body(handler)
 
@@ -1261,6 +1372,59 @@ def handle_post(handler, parsed) -> bool:
         handler.wfile.write(json.dumps({"ok": True}).encode())
         return True
 
+    # ── System file manager POST routes ───────────────────────────────────
+    if parsed.path == "/api/sysfile/delete":
+        from api.sysfiles import sf_delete
+        root_id = body.get('root', '')
+        rel = body.get('path', '')
+        try:
+            sf_delete(root_id, rel)
+            return j(handler, {"ok": True})
+        except (ValueError, FileNotFoundError) as e:
+            return j(handler, {"error": str(e)}, status=400)
+
+    if parsed.path == "/api/sysfile/version/restore":
+        from api.sysfiles import sf_restore_version
+        root_id = body.get('root', '')
+        rel = body.get('path', '')
+        version_id = body.get('version_id', '')
+        try:
+            sf_restore_version(root_id, rel, version_id)
+            return j(handler, {"ok": True})
+        except (ValueError, FileNotFoundError) as e:
+            return j(handler, {"error": str(e)}, status=400)
+
+    if parsed.path == "/api/sysfile/trash/restore":
+        from api.sysfiles import sf_restore_trash
+        root_id = body.get('root', '')
+        trash_id = body.get('trash_id', '')
+        try:
+            sf_restore_trash(root_id, trash_id)
+            return j(handler, {"ok": True})
+        except (ValueError, FileNotFoundError) as e:
+            return j(handler, {"error": str(e)}, status=400)
+
+    if parsed.path == "/api/sysfile/trash/purge":
+        from api.sysfiles import sf_purge_trash
+        root_id = body.get('root', '')
+        trash_id = body.get('trash_id', '')
+        purge_all = body.get('all', False)
+        try:
+            sf_purge_trash(root_id, None if purge_all else trash_id)
+            return j(handler, {"ok": True})
+        except (ValueError, FileNotFoundError) as e:
+            return j(handler, {"error": str(e)}, status=400)
+
+    if parsed.path == "/api/sysfile/mkdir":
+        from api.sysfiles import sf_mkdir
+        root_id = body.get('root', '')
+        rel = body.get('path', '')
+        try:
+            sf_mkdir(root_id, rel)
+            return j(handler, {"ok": True})
+        except (ValueError, Exception) as e:
+            return j(handler, {"error": str(e)}, status=400)
+
     return False  # 404
 
 
@@ -1473,6 +1637,12 @@ def _handle_file_raw(handler, parsed):
     import urllib.parse as _up
 
     safe_name = _up.quote(target.name, safe="")
+    # filename= must be ASCII-safe (HTTP/1.1 headers are ISO-8859-1);
+    # use the RFC 5987 filename*= form for the real UTF-8 name.
+    try:
+        ascii_name = target.name.encode("ascii").decode("ascii")
+    except UnicodeEncodeError:
+        ascii_name = target.stem[:20].encode("ascii", "ignore").decode("ascii") + target.suffix or "file"
     handler.send_response(200)
     handler.send_header("Content-Type", mime)
     handler.send_header("Content-Length", str(len(raw_bytes)))
@@ -1482,16 +1652,384 @@ def _handle_file_raw(handler, parsed):
     if force_download or mime in dangerous_types:
         handler.send_header(
             "Content-Disposition",
-            f"attachment; filename=\"{target.name}\"; filename*=UTF-8''{safe_name}",
+            f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{safe_name}",
         )
     else:
         handler.send_header(
             "Content-Disposition",
-            f"inline; filename=\"{target.name}\"; filename*=UTF-8''{safe_name}",
+            f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{safe_name}",
         )
     handler.end_headers()
     handler.wfile.write(raw_bytes)
     return True
+
+
+def _handle_file_pptx_html(handler, parsed):
+    """Convert a pptx/ppt file to HTML using python-pptx and return as JSON."""
+    from urllib.parse import parse_qs
+    qs = parse_qs(parsed.query)
+    sid = qs.get("session_id", [""])[0]
+    if not sid:
+        return bad(handler, "session_id is required")
+    try:
+        s = get_session(sid)
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    rel = qs.get("path", [""])[0]
+    target = safe_resolve(Path(s.workspace), rel)
+    if not target.exists() or not target.is_file():
+        return j(handler, {"error": "not found"}, status=404)
+    try:
+        html_content = _pptx_to_html(target)
+        return j(handler, {"html": html_content})
+    except Exception as e:
+        return j(handler, {"error": str(e)}, status=500)
+
+
+def _handle_file_docx_html(handler, parsed):
+    """Convert a docx file to HTML using mammoth and return as JSON."""
+    from urllib.parse import parse_qs
+    qs = parse_qs(parsed.query)
+    sid = qs.get("session_id", [""])[0]
+    if not sid:
+        return bad(handler, "session_id is required")
+    try:
+        s = get_session(sid)
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    rel = qs.get("path", [""])[0]
+    target = safe_resolve(Path(s.workspace), rel)
+    if not target.exists() or not target.is_file():
+        return j(handler, {"error": "not found"}, status=404)
+    try:
+        html_content = _docx_to_html(target)
+        return j(handler, {"html": html_content})
+    except Exception as e:
+        return j(handler, {"error": str(e)}, status=500)
+
+
+def _docx_to_html(path: Path) -> str:
+    try:
+        import mammoth
+    except ImportError:
+        raise RuntimeError("mammoth not installed: pip install mammoth")
+
+    with open(path, "rb") as f:
+        result = mammoth.convert_to_html(f)
+    body = result.value
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{font-family:'Segoe UI','Noto Sans SC',Arial,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;background:#fff;padding:32px 48px;max-width:860px;margin:0 auto;}}
+h1,h2,h3,h4,h5,h6{{font-family:'Inter','Noto Sans SC',sans-serif;font-weight:700;margin:1.2em 0 .4em;color:#111;}}
+h1{{font-size:22px;}} h2{{font-size:18px;}} h3{{font-size:15px;}}
+p{{margin:.5em 0;}}
+ul,ol{{padding-left:1.6em;margin:.5em 0;}}
+li{{margin:.2em 0;}}
+table{{border-collapse:collapse;width:100%;margin:1em 0;font-size:13px;}}
+th,td{{border:1px solid #ddd;padding:6px 10px;text-align:left;}}
+th{{background:#f5f5f5;font-weight:600;}}
+img{{max-width:100%;height:auto;border-radius:4px;margin:.5em 0;}}
+a{{color:#558b2f;}}
+strong{{font-weight:700;}} em{{font-style:italic;}}
+</style></head><body>
+{body}
+</body></html>"""
+
+
+def _pptx_to_html(path: Path) -> str:
+    import html as html_mod
+    import base64
+    import zipfile
+    from lxml import etree
+    try:
+        from pptx import Presentation
+        from pptx.enum.text import PP_ALIGN
+        from pptx.enum.dml import MSO_FILL, MSO_THEME_COLOR
+    except ImportError:
+        raise RuntimeError("python-pptx not installed")
+
+    # --- Load actual theme colors from zip ---
+    _NS = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    _THEME_KEY_MAP = {
+        'dk1': MSO_THEME_COLOR.DARK_1,   'lt1': MSO_THEME_COLOR.LIGHT_1,
+        'dk2': MSO_THEME_COLOR.DARK_2,   'lt2': MSO_THEME_COLOR.LIGHT_2,
+        'accent1': MSO_THEME_COLOR.ACCENT_1, 'accent2': MSO_THEME_COLOR.ACCENT_2,
+        'accent3': MSO_THEME_COLOR.ACCENT_3, 'accent4': MSO_THEME_COLOR.ACCENT_4,
+        'accent5': MSO_THEME_COLOR.ACCENT_5, 'accent6': MSO_THEME_COLOR.ACCENT_6,
+        'hlink': MSO_THEME_COLOR.HYPERLINK, 'folHlink': MSO_THEME_COLOR.FOLLOWED_HYPERLINK,
+    }
+    THEME_MAP = {
+        MSO_THEME_COLOR.DARK_1: '#000000', MSO_THEME_COLOR.LIGHT_1: '#ffffff',
+        MSO_THEME_COLOR.DARK_2: '#1f3864', MSO_THEME_COLOR.LIGHT_2: '#e7e6e6',
+        MSO_THEME_COLOR.ACCENT_1: '#4472c4', MSO_THEME_COLOR.ACCENT_2: '#ed7d31',
+        MSO_THEME_COLOR.ACCENT_3: '#a9d18e', MSO_THEME_COLOR.ACCENT_4: '#ffc000',
+        MSO_THEME_COLOR.ACCENT_5: '#5b9bd5', MSO_THEME_COLOR.ACCENT_6: '#70ad47',
+    }
+    try:
+        with zipfile.ZipFile(str(path)) as z:
+            theme_files = [n for n in z.namelist() if n.startswith('ppt/theme/') and n.endswith('.xml')]
+            if theme_files:
+                root = etree.fromstring(z.read(theme_files[0]))
+                clr = root.find(f'.//{{{_NS}}}clrScheme')
+                if clr is not None:
+                    for child in clr:
+                        key = child.tag.split('}')[-1]
+                        tc = _THEME_KEY_MAP.get(key)
+                        if tc is None:
+                            continue
+                        for cel in child:
+                            val = cel.get('val') or cel.get('lastClr')
+                            if val:
+                                THEME_MAP[tc] = f'#{val.lstrip("#").lower()}'
+                                break
+    except Exception:
+        pass
+
+    def emu_pct_w(emu, w): return emu / w * 100
+    def emu_pct_h(emu, h): return emu / h * 100
+
+    def apply_lum(hex_color, lum):
+        r = int(hex_color[1:3], 16)
+        g = int(hex_color[3:5], 16)
+        b = int(hex_color[5:7], 16)
+        if lum > 0:
+            r = int(r + (255 - r) * lum)
+            g = int(g + (255 - g) * lum)
+            b = int(b + (255 - b) * lum)
+        else:
+            r = int(r * (1 + lum))
+            g = int(g * (1 + lum))
+            b = int(b * (1 + lum))
+        return f'#{max(0,min(255,r)):02x}{max(0,min(255,g)):02x}{max(0,min(255,b)):02x}'
+
+    def color_css(color_obj):
+        try:
+            if color_obj.type is None:
+                return None
+            try:
+                rgb = color_obj.rgb
+                return f'#{rgb.red:02x}{rgb.green:02x}{rgb.blue:02x}'
+            except AttributeError:
+                pass
+            # theme color
+            tc = color_obj.theme_color
+            base = THEME_MAP.get(tc, '#888888')
+            try:
+                lum = color_obj.brightness
+                if lum != 0:
+                    return apply_lum(base, lum)
+            except Exception:
+                pass
+            return base
+        except Exception:
+            return None
+
+    def fill_css(fill):
+        try:
+            ft = fill.type
+            if ft is None:
+                return ''
+            if ft == MSO_FILL.SOLID:
+                c = color_css(fill.fore_color)
+                return f'background:{c};' if c else ''
+            if ft == MSO_FILL.GRADIENT:
+                try:
+                    c = color_css(fill.gradient_stops[0].color)
+                    return f'background:{c};' if c else ''
+                except Exception:
+                    return ''
+        except Exception:
+            pass
+        return ''
+
+    def get_font_color(run):
+        try:
+            fc = run.font.color
+            if fc and fc.type:
+                return color_css(fc)
+        except Exception:
+            pass
+        return None
+
+    def shape_html(shape, sw, sh, slide_bg):
+        if shape.left is None or shape.top is None:
+            return ''
+        left = emu_pct_w(shape.left, sw)
+        top  = emu_pct_h(shape.top,  sh)
+        w    = emu_pct_w(shape.width or 0, sw)
+        h    = emu_pct_h(shape.height or 0, sh)
+        pos  = (f'position:absolute;left:{left:.3f}%;top:{top:.3f}%;'
+                f'width:{w:.3f}%;height:{h:.3f}%;overflow:hidden;box-sizing:border-box;')
+
+        # Picture
+        try:
+            from pptx.shapes.picture import Picture as Pic
+            if isinstance(shape, Pic):
+                img_bytes = shape.image.blob
+                mime = shape.image.content_type or 'image/png'
+                b64 = base64.b64encode(img_bytes).decode()
+                return (f'<div style="{pos}">'
+                        f'<img src="data:{mime};base64,{b64}" '
+                        f'style="width:100%;height:100%;object-fit:contain;" /></div>')
+        except Exception:
+            pass
+
+        # Shape fill background
+        shape_bg = ''
+        try:
+            shape_bg = fill_css(shape.fill)
+        except Exception:
+            pass
+
+        if not shape.has_text_frame:
+            if shape_bg:
+                return f'<div style="{pos}{shape_bg}"></div>'
+            return ''
+
+        # Text frame
+        tf = shape.text_frame
+        va = ''
+        try:
+            from pptx.enum.text import MSO_ANCHOR
+            anc = tf.vertical_anchor
+            if anc == MSO_ANCHOR.MIDDLE: va = 'justify-content:center;'
+            elif anc == MSO_ANCHOR.BOTTOM: va = 'justify-content:flex-end;'
+        except Exception:
+            pass
+
+        paras = []
+        for para in tf.paragraphs:
+            runs_html = []
+            for run in para.runs:
+                txt = html_mod.escape(run.text)
+                if not txt:
+                    continue
+                rs = ''
+                try:
+                    if run.font.bold:   rs += 'font-weight:700;'
+                    if run.font.italic: rs += 'font-style:italic;'
+                    sz = run.font.size
+                    if sz is None:
+                        # inherit from paragraph / placeholder default
+                        try: sz = para._pPr.defRPr.sz
+                        except Exception: pass
+                    if sz:
+                        try: rs += f'font-size:{sz.pt:.1f}pt;'
+                        except Exception: rs += f'font-size:{sz/12700:.1f}pt;'
+                    c = get_font_color(run)
+                    if c: rs += f'color:{c};'
+                except Exception:
+                    pass
+                runs_html.append(f'<span style="{rs}">{txt}</span>' if rs else txt)
+
+            if not runs_html:
+                # empty paragraph = line break
+                paras.append('<p style="margin:0;line-height:1em;">&nbsp;</p>')
+                continue
+
+            align = 'text-align:left;'
+            try:
+                if para.alignment == PP_ALIGN.CENTER:      align = 'text-align:center;'
+                elif para.alignment == PP_ALIGN.RIGHT:     align = 'text-align:right;'
+                elif para.alignment == PP_ALIGN.JUSTIFY:   align = 'text-align:justify;'
+            except Exception:
+                pass
+
+            spc = ''
+            try:
+                sp = para.line_spacing
+                if sp: spc = f'line-height:{float(sp):.2f};'
+            except Exception:
+                pass
+
+            paras.append(f'<p style="margin:0 0 1px;{align}{spc}">' + ''.join(runs_html) + '</p>')
+
+        inner = '\n'.join(paras)
+        return (f'<div style="{pos}{shape_bg}display:flex;flex-direction:column;{va}'
+                f'padding:4px 6px;font-size:14px;line-height:1.4;">{inner}</div>')
+
+    prs = Presentation(str(path))
+    sw = prs.slide_width.emu
+    sh = prs.slide_height.emu
+    ratio = sh / sw * 100
+
+    slides_html = []
+    for i, slide in enumerate(prs.slides):
+        # Slide background: try slide -> layout -> master in order
+        bg_style = 'background:#ffffff;'
+        bg_img_html = ''
+        for bg_src in [slide, slide.slide_layout, slide.slide_layout.slide_master]:
+            try:
+                bg_fill = bg_src.background.fill
+                css = fill_css(bg_fill)
+                if css:
+                    bg_style = css
+                    break
+                # try blip (image) background
+                try:
+                    from pptx.oxml.ns import qn
+                    blipFill = bg_fill._fill.find(qn('a:blipFill'))
+                    if blipFill is not None:
+                        blip = blipFill.find(qn('a:blip'))
+                        if blip is not None:
+                            rId = blip.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                            if rId:
+                                img_part = bg_src.part.related_parts[rId]
+                                b64 = base64.b64encode(img_part.blob).decode()
+                                mime = img_part.content_type or 'image/png'
+                                bg_style = ''
+                                bg_img_html = (f'<img src="data:{mime};base64,{b64}" '
+                                               f'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />')
+                                break
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        shapes_html = ''.join(shape_html(s, sw, sh, bg_style) for s in slide.shapes)
+
+        # Escape backticks for JS template literal
+        slide_str = (f'<div class="pptx-slide" style="{bg_style}">'
+                     f'{bg_img_html}{shapes_html}</div>')
+        slides_html.append(slide_str)
+
+    import json
+    slides_json = json.dumps(slides_html)
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+html,body{{height:100%;}}
+body{{background:#1e1e2e;font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;padding:10px;gap:10px;}}
+.nav{{display:flex;align-items:center;gap:8px;color:#ccc;font-size:13px;flex-shrink:0;}}
+.nav button{{background:#2a2a3e;border:1px solid #555;color:#ccc;padding:3px 14px;border-radius:4px;cursor:pointer;font-size:13px;}}
+.nav button:hover{{background:#3a3a5e;color:#fff;}}
+.nav span{{min-width:60px;text-align:center;}}
+.wrap{{position:relative;width:100%;flex:1;}}
+.inner{{position:absolute;inset:0;}}
+.pptx-slide{{position:absolute;inset:0;}}
+</style></head><body>
+<div class="nav">
+  <button onclick="go(-1)">&#8592; 上一页</button>
+  <span id="pg"></span>
+  <button onclick="go(1)">下一页 &#8594;</button>
+</div>
+<div class="wrap"><div class="inner" id="wrap"></div></div>
+<script>
+const slides={slides_json};
+let cur=0;
+function render(){{
+  document.getElementById('wrap').innerHTML=slides[cur];
+  document.getElementById('pg').textContent=(cur+1)+' / '+slides.length;
+}}
+function go(d){{cur=(cur+d+slides.length)%slides.length;render();}}
+document.addEventListener('keydown',e=>{{if(e.key==='ArrowRight'||e.key==='ArrowDown')go(1);else if(e.key==='ArrowLeft'||e.key==='ArrowUp')go(-1);}});
+render();
+</script></body></html>"""
 
 
 def _handle_file_read(handler, parsed):
