@@ -317,9 +317,6 @@ def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id, atta
                     session_id=session_id,
                     personality=_personality_prompt,
                 )
-                _openclaw_session_key = getattr(s, 'openclaw_session_key', None)
-                if _openclaw_session_key:
-                    _run_kwargs['openclaw_session_key'] = _openclaw_session_key
                 _agent_result = _iagent.run(**_run_kwargs)
                 s.messages = _agent_result.messages or s.messages
                 # Build usage and timestamps, then jump to done

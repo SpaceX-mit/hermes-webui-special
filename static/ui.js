@@ -814,33 +814,38 @@ function renderMessages(){
     }
     // Parse inline thinking tags from plain text: <think>...</think> (DeepSeek, QwQ, MiniMax, etc.)
     // and Gemma 4 channel tokens: <|channel>thought\n...<channel|>
-    // Note: no ^ anchor — some models emit leading whitespace/newlines before <think>.
+    // Collect ALL think blocks as separate cards.
+    const thinkingBlocks=[]; // array of strings, one per block
     if(!thinkingText && typeof content==='string'){
-      const thinkMatch=content.match(/<think>([\s\S]*?)<\/think>/);
-      if(thinkMatch){
-        thinkingText=thinkMatch[1].trim();
+      // Extract all <think>...</think> blocks
+      const thinkRe=/<think>([\s\S]*?)<\/think>/g;
+      let m2;
+      while((m2=thinkRe.exec(content))!==null) thinkingBlocks.push(m2[1].trim());
+      if(thinkingBlocks.length){
         content=content.replace(/<think>[\s\S]*?<\/think>\s*/g,'').trimStart();
-      }
-      if(!thinkingText){
-        const gemmaMatch=content.match(/<\|channel>thought\n([\s\S]*?)<channel\|>/);
-        if(gemmaMatch){
-          thinkingText=gemmaMatch[1].trim();
+      } else {
+        // Gemma channel tokens
+        const gemmaRe=/<\|channel>thought\n([\s\S]*?)<channel\|>/g;
+        while((m2=gemmaRe.exec(content))!==null) thinkingBlocks.push(m2[1].trim());
+        if(thinkingBlocks.length)
           content=content.replace(/<\|channel>thought\n[\s\S]*?<channel\|>\s*/g,'').trimStart();
-        }
       }
+    } else if(thinkingText){
+      thinkingBlocks.push(thinkingText);
     }
     const isUser=m.role==='user';
     const isLastAssistant=!isUser&&vi===visWithIdx.length-1;
-    // Render thinking card before the assistant message (collapsed by default)
-    // In JDUI: thinking card sits above the bubble, aligned with the avatar
+    // Render thinking cards (one per block) before the assistant message
     let thinkingHtml='';
-    if(thinkingText&&!isUser){
+    if(thinkingBlocks.length&&!isUser){
       if(typeof _isJduiTheme==='function'&&_isJduiTheme()){
-        thinkingHtml=`<div class="jdui-thinking-card"><div class="jdui-thinking-header" onclick="this.parentElement.classList.toggle('open')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.2 6H8.2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="17" x2="15" y2="17"/><line x1="10" y1="20" x2="14" y2="20"/></svg><span>Thinking</span><svg class="jdui-thinking-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div><div class="jdui-thinking-body"><pre>${esc(thinkingText)}</pre></div></div>`;
+        thinkingHtml=thinkingBlocks.map(tb=>`<div class="jdui-thinking-card"><div class="jdui-thinking-header" onclick="this.parentElement.classList.toggle('open')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.2 6H8.2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="17" x2="15" y2="17"/><line x1="10" y1="20" x2="14" y2="20"/></svg><span>Thinking</span><svg class="jdui-thinking-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div><div class="jdui-thinking-body"><pre>${esc(tb)}</pre></div></div>`).join('');
       } else {
-        const thinkRow=document.createElement('div');thinkRow.className='msg-row thinking-card-row';
-        thinkRow.innerHTML=`<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(thinkingText)}</pre></div></div>`;
-        inner.appendChild(thinkRow);
+        for(const tb of thinkingBlocks){
+          const thinkRow=document.createElement('div');thinkRow.className='msg-row thinking-card-row';
+          thinkRow.innerHTML=`<div class="thinking-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(tb)}</pre></div></div>`;
+          inner.appendChild(thinkRow);
+        }
       }
     }
     const row=document.createElement('div');row.className='msg-row';
@@ -1567,6 +1572,15 @@ function _syncJduiTopbar(){
   const providerBg=providerName==='openclaw'?'rgba(102,126,234,0.12)':'rgba(178,228,13,0.12)';
   const providerColor=providerName==='openclaw'?'#667eea':'#558b2f';
 
+  // Workspace display — show last segment + full path on hover, click to copy
+  const wsPath=S.session&&S.session.workspace?S.session.workspace:'';
+  const wsShort=wsPath?wsPath.split('/').filter(Boolean).pop()||wsPath:'';
+  const wsHtml=wsPath?`
+    <span class="jdui-topbar-ws" title="${esc(wsPath)}" onclick="openFM()" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;color:rgba(60,60,67,0.55);background:rgba(0,0,0,0.04);border-radius:5px;padding:2px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      ${esc(wsShort)}
+    </span>`:'';
+
   // ── Employee info + action buttons in the chat topbar ──
   const div=document.createElement('div');
   div.className='jdui-topbar';
@@ -1580,6 +1594,7 @@ function _syncJduiTopbar(){
       <span class="jdui-topbar-desc">${esc(empDesc)}</span>
     </div>
     <div class="jdui-topbar-actions">
+      ${wsHtml}
       <button title="搜索" onclick="$('sessionSearch').focus()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(60,60,67,0.5)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>

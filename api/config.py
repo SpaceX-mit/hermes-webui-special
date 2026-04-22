@@ -328,6 +328,11 @@ MIME_MAP = {
     ".bmp": "image/bmp",
     ".pdf": "application/pdf",
     ".json": "application/json",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls":  "application/vnd.ms-excel",
+    ".csv":  "text/csv",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".ppt":  "application/vnd.ms-powerpoint",
 }
 
 # ── Toolsets (from config.yaml or hardcoded default) ─────────────────────────

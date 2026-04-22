@@ -196,7 +196,7 @@ def switch_profile(name: str) -> dict:
     reload_config()
 
     # Return profile-specific defaults so frontend can apply them
-    from api.workspace import get_last_workspace
+    from api.workspace import get_last_workspace, get_workspace_for_profile
     from api.config import get_config
     cfg = get_config()
     model_cfg = cfg.get('model', {})
@@ -206,11 +206,18 @@ def switch_profile(name: str) -> dict:
     elif isinstance(model_cfg, dict):
         default_model = model_cfg.get('default')
 
+    # Prefer the profile's own workspace from config.yaml; fall back to global last
+    try:
+        profile_ws = get_workspace_for_profile(name)
+    except Exception:
+        profile_ws = None
+    default_workspace = profile_ws or get_last_workspace()
+
     return {
         'profiles': list_profiles_api(),
         'active': name,
         'default_model': default_model,
-        'default_workspace': get_last_workspace(),
+        'default_workspace': default_workspace,
     }
 
 

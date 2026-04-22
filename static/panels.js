@@ -1911,13 +1911,18 @@ async function _confirmDeleteEmployee(id, name) {
   await _loadEmployeePanel();
 }
 
+let _empFormProvidersCache = null;
+
 async function _renderEmpFormProviders(){
   const sel=$('empFormProvider');
   if(!sel)return;
   sel.innerHTML='';
   try{
-    const data=await api('/api/agent/providers');
-    (data.providers||[]).forEach(p=>{
+    if(!_empFormProvidersCache){
+      const data=await api('/api/agent/providers');
+      _empFormProvidersCache=data.providers||[];
+    }
+    _empFormProvidersCache.forEach(p=>{
       const opt=document.createElement('option');
       opt.value=p.id;
       opt.textContent=p.id.charAt(0).toUpperCase()+p.id.slice(1)+(p.available?'':' (不可用)');

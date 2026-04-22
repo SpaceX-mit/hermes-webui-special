@@ -37,8 +37,6 @@ class AgentManager:
                 'id': pid,
                 'available': p.is_available(),
                 'is_default': pid == cls._default_provider,
-                'models': p.get_supported_models() if p.is_available() else [],
-                'interfaces': cls._get_provider_interfaces(p),
             }
             for pid, p in cls._providers.items()
         ]

@@ -116,8 +116,7 @@ def _set_profile_workspace(profile_name, workspace_path: str):
             config_path.write_text(line)
 
 
-
-    """Update platform_toolsets.cli in the profile's config.yaml."""
+def _update_profile_toolsets(profile_name, capabilities):
     profile_dir = _get_profile_dir(profile_name)
     config_path = profile_dir / 'config.yaml'
 

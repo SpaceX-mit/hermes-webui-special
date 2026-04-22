@@ -38,6 +38,7 @@ function _hasWorkspacePreviewVisible(){
 function _setWorkspacePanelMode(mode){
   const {layout,panel}= _workspacePanelEls();
   if(!layout||!panel)return;
+  const wasOpen=_workspacePanelMode!=='closed';
   _workspacePanelMode=(mode==='browse'||mode==='preview')?mode:'closed';
   const open=_workspacePanelMode!=='closed';
   // Persist open/closed across refreshes (browse/preview → open; closed → closed)
@@ -49,6 +50,13 @@ function _setWorkspacePanelMode(mode){
     panel.classList.remove('mobile-open');
   }
   syncWorkspacePanelUI();
+  // Auto-load file list when opening browse mode and tree is empty
+  if(_workspacePanelMode==='browse'&&(!wasOpen||mode==='browse')){
+    const fileTree=document.getElementById('fileTree');
+    if(fileTree&&!fileTree.children.length&&S.session&&typeof loadDir==='function'){
+      loadDir('.');
+    }
+  }
 }
 
 function syncWorkspacePanelState(){
@@ -440,11 +448,13 @@ window.addEventListener('resize',()=>{
       const onMove = ev=>{
         const delta = edge==='right' ? ev.clientX - startX : startX - ev.clientX;
         const newW = Math.min(maxW, Math.max(minW, startW + delta));
+        targetEl.style.transition='none';
         targetEl.style.width = newW + 'px';
       };
       const onUp = ()=>{
         handle.classList.remove('dragging');
         document.body.classList.remove('resizing');
+        targetEl.style.transition='';
         localStorage.setItem(storageKey, parseInt(targetEl.style.width));
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);

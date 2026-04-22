@@ -111,38 +111,65 @@ async function send(){
 
   // rAF-throttled rendering: buffer tokens, render at most once per frame
   let _renderPending=false;
-  // Extract display text from assistantText, stripping completed thinking blocks
-  // and hiding content still inside an open thinking block.
-  function _streamDisplay(){
-    const raw=assistantText;
+  // Parse assistantText into segments: {type:'think'|'text', content, done}
+  // Handles multiple think blocks interleaved with text.
+  function _parseSegments(){
+    const segments=[];
+    let rest=assistantText;
     for(const {open,close} of _thinkPairs){
-      // Trim leading whitespace before checking for the open tag — some models
-      // (e.g. MiniMax) emit newlines before <think>.
-      const trimmed=raw.trimStart();
-      if(trimmed.startsWith(open)){
-        const ci=trimmed.indexOf(close,open.length);
-        if(ci!==-1){
-          // Thinking block complete — strip it, show the rest
-          return trimmed.slice(ci+close.length).replace(/^\s+/,'');
+      // Process all occurrences of this pair
+      let s=rest;
+      let out=[];
+      while(true){
+        const oi=s.indexOf(open);
+        if(oi===-1){out.push({type:'text',content:s});break;}
+        if(oi>0) out.push({type:'text',content:s.slice(0,oi)});
+        const ci=s.indexOf(close,oi+open.length);
+        if(ci===-1){
+          // Unclosed think block — still streaming
+          out.push({type:'think',content:s.slice(oi+open.length),done:false});
+          s='';break;
         }
-        // Still inside thinking block — show placeholder
-        return '';
+        out.push({type:'think',content:s.slice(oi+open.length,ci),done:true});
+        s=s.slice(ci+close.length);
       }
-      // Hide partial tag prefixes while streaming so users don't see
-      // `<thi`, `<think`, etc. before the model finishes the token.
-      if(open.startsWith(trimmed)) return '';
+      if(out.some(seg=>seg.type==='think')){
+        // This pair matched — use its result
+        segments.push(...out);
+        return segments;
+      }
     }
-    return raw;
+    // No think tags found
+    segments.push({type:'text',content:rest});
+    return segments;
   }
+
   function _scheduleRender(){
     if(_renderPending) return;
     _renderPending=true;
     requestAnimationFrame(()=>{
       _renderPending=false;
       if(assistantBody){
-        const txt=_streamDisplay();
-        const isThinking=!txt&&assistantText.length>0;
-        assistantBody.innerHTML=txt?renderMd(txt):(isThinking?'<span style="color:var(--muted);font-size:13px">Thinking\u2026</span>':'');
+        const segs=_parseSegments();
+        let html='';
+        let hasOpenThink=false;
+        for(const seg of segs){
+          if(seg.type==='think'){
+            if(seg.done){
+              // Completed think block — render collapsed card inline
+              const body=esc(seg.content.trim());
+              html+=`<div class="thinking-card stream-think-card"><div class="thinking-card-header" onclick="this.parentElement.classList.toggle('open')"><span class="thinking-card-icon">${li('lightbulb',14)}</span><span class="thinking-card-label">${t('thinking')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${body}</pre></div></div>`;
+            } else {
+              hasOpenThink=true;
+              html+=`<span style="color:var(--muted);font-size:13px">Thinking\u2026</span>`;
+            }
+          } else {
+            const txt=seg.content.replace(/^\s+/,'');
+            if(txt) html+=renderMd(txt);
+          }
+        }
+        if(!html&&assistantText.length>0) html=`<span style="color:var(--muted);font-size:13px">Thinking\u2026</span>`;
+        assistantBody.innerHTML=html;
       }
       scrollIfPinned();
     });

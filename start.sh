@@ -22,4 +22,4 @@ if [[ -z "${PYTHON}" ]]; then
   fi
 fi
 
-exec "${PYTHON}" "${REPO_ROOT}/bootstrap.py" --no-browser "$@"
+exec "${PYTHON}" "${REPO_ROOT}/bootstrap.py" --no-browser --host 0.0.0.0 "$@"
