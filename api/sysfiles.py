@@ -26,8 +26,7 @@ _TRASH_DAYS = 30
 def _get_employees():
     try:
         from api.employees import list_employees
-        data = list_employees()
-        return data.get('employees', [])
+        return list_employees()
     except Exception:
         return []
 

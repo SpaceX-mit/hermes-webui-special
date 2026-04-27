@@ -580,14 +580,14 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/employees":
         from api.employees import list_employees
-        return j(handler, list_employees())
+        return j(handler, {"employees": list_employees()})
 
     if parsed.path == "/api/employee/sessions":
         emp_id = parse_qs(parsed.query).get("employee_id", [""])[0]
         if not emp_id:
             return bad(handler, "employee_id required")
         from api.employees import list_employees
-        emps = list_employees().get("employees", [])
+        emps = list_employees()
         emp = next((e for e in emps if e["id"] == emp_id), None)
         if not emp:
             return j(handler, {"error": "employee not found"}, status=404)
@@ -628,6 +628,58 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/sysfile/roots":
         from api.sysfiles import get_roots
         return j(handler, {"roots": get_roots()})
+
+    # ── AgentFS: GET routes ────────────────────────────────────────────────
+    if parsed.path == "/api/agentfs/project/files":
+        from urllib.parse import parse_qs as _pqs
+        qs = _pqs(parsed.query)
+        project_id = qs.get("project_id", [""])[0]
+        if not project_id:
+            return bad(handler, "project_id required")
+        from api.agentfs import afs_list_project_files
+        files = afs_list_project_files(project_id)
+        return j(handler, {"project_id": project_id, "files": files})
+
+    if parsed.path == "/api/agentfs/permissions":
+        from urllib.parse import parse_qs as _pqs
+        qs = _pqs(parsed.query)
+        project_id = qs.get("project_id", [""])[0]
+        if not project_id:
+            return bad(handler, "project_id required")
+        projects = load_projects()
+        proj = next((p for p in projects if p["project_id"] == project_id), None)
+        if not proj:
+            return bad(handler, "Project not found", 404)
+        from api.employees import list_employees
+        emps = {e["id"]: e for e in list_employees()}
+        matrix = []
+        for agent_cfg in proj.get("agents", []):
+            emp = emps.get(agent_cfg["emp_id"], {})
+            matrix.append({
+                "emp_id": agent_cfg["emp_id"],
+                "emp_name": emp.get("name", agent_cfg["emp_id"]),
+                "role": agent_cfg.get("role", ""),
+                "permissions": agent_cfg.get("permissions", {"read": True, "write": False}),
+            })
+        return j(handler, {"project_id": project_id, "matrix": matrix})
+
+    if parsed.path == "/api/agentfs/permission/requests":
+        from api.agentfs_permissions import list_pending_requests
+        return j(handler, {"requests": list_pending_requests()})
+
+    if parsed.path == "/api/agentfs/project/skill":
+        from urllib.parse import parse_qs as _pqs
+        qs = _pqs(parsed.query)
+        project_id = qs.get("project_id", [""])[0]
+        if not project_id:
+            return bad(handler, "project_id required")
+        from api.agentfs_skill import get_project_skill
+        content = get_project_skill(project_id)
+        if content is None:
+            return bad(handler, "Skill not found", 404)
+        return j(handler, {"project_id": project_id, "content": content})
+
+
 
     if parsed.path.startswith("/api/sysfile/"):
         from urllib.parse import parse_qs as _pqs
@@ -753,7 +805,7 @@ def handle_post(handler, parsed) -> bool:
         if _emp_id:
             try:
                 from api.employees import list_employees
-                for _emp in list_employees().get('employees', []):
+                for _emp in list_employees():
                     if _emp.get('id') == _emp_id:
                         _pname = _emp.get('profile_name', s.profile)
                         s.profile = _pname
@@ -1306,6 +1358,162 @@ def handle_post(handler, parsed) -> bool:
             except Exception:
                 pass
         return j(handler, {"ok": True})
+
+    # ── AgentFS: project update (POST) ──
+    if parsed.path == "/api/projects/update":
+        try:
+            require(body, "project_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        import re as _re
+        projects = load_projects()
+        proj = next((p for p in projects if p["project_id"] == body["project_id"]), None)
+        if not proj:
+            return bad(handler, "Project not found", 404)
+        for field in ("description", "status", "charter"):
+            if field in body:
+                proj[field] = body[field]
+        if "color" in body:
+            color = body["color"]
+            if color and not _re.match(r"^#[0-9a-fA-F]{3,8}$", color):
+                return bad(handler, "Invalid color format")
+            proj["color"] = color
+        proj["updated_at"] = time.time()
+        save_projects(projects)
+        return j(handler, {"ok": True, "project": proj})
+
+    # ── AgentFS: project agents (POST) ──
+    if parsed.path == "/api/projects/agents/add":
+        try:
+            require(body, "project_id", "emp_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        projects = load_projects()
+        proj = next((p for p in projects if p["project_id"] == body["project_id"]), None)
+        if not proj:
+            return bad(handler, "Project not found", 404)
+        if "agents" not in proj:
+            proj["agents"] = []
+        # 去重
+        if not any(a["emp_id"] == body["emp_id"] for a in proj["agents"]):
+            proj["agents"].append({
+                "emp_id": body["emp_id"],
+                "role": body.get("role", "协作Agent"),
+                "permissions": body.get("permissions", {"read": True, "write": False}),
+            })
+        proj["updated_at"] = time.time()
+        save_projects(projects)
+        return j(handler, {"ok": True, "project": proj})
+
+    if parsed.path == "/api/projects/agents/remove":
+        try:
+            require(body, "project_id", "emp_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        projects = load_projects()
+        proj = next((p for p in projects if p["project_id"] == body["project_id"]), None)
+        if not proj:
+            return bad(handler, "Project not found", 404)
+        proj["agents"] = [a for a in proj.get("agents", []) if a["emp_id"] != body["emp_id"]]
+        proj["updated_at"] = time.time()
+        save_projects(projects)
+        return j(handler, {"ok": True, "project": proj})
+
+    # ── AgentFS: logical index (POST) ──
+    if parsed.path == "/api/agentfs/project/add":
+        try:
+            require(body, "project_id", "root_id", "rel_path")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs import afs_add_to_project
+        entry = afs_add_to_project(
+            body["project_id"], body["root_id"], body["rel_path"],
+            added_by=body.get("added_by", "user"),
+            tags=body.get("tags", []),
+        )
+        return j(handler, {"ok": True, "entry": entry})
+
+    if parsed.path == "/api/agentfs/project/remove":
+        try:
+            require(body, "entry_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs import afs_remove_from_project
+        ok = afs_remove_from_project(body["entry_id"])
+        return j(handler, {"ok": ok})
+
+    if parsed.path == "/api/agentfs/project/move":
+        try:
+            require(body, "entry_id", "project_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs import afs_move_entry
+        entry = afs_move_entry(body["entry_id"], body["project_id"])
+        if not entry:
+            return bad(handler, "Entry not found", 404)
+        return j(handler, {"ok": True, "entry": entry})
+
+    # ── AgentFS: permissions (POST) ──
+    if parsed.path == "/api/agentfs/permissions/update":
+        try:
+            require(body, "project_id", "emp_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        projects = load_projects()
+        proj = next((p for p in projects if p["project_id"] == body["project_id"]), None)
+        if not proj:
+            return bad(handler, "Project not found", 404)
+        for agent_cfg in proj.get("agents", []):
+            if agent_cfg["emp_id"] == body["emp_id"]:
+                agent_cfg["permissions"] = body.get("permissions", agent_cfg["permissions"])
+                break
+        proj["updated_at"] = time.time()
+        save_projects(projects)
+        return j(handler, {"ok": True})
+
+    if parsed.path == "/api/agentfs/permission/approve":
+        try:
+            require(body, "request_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs_permissions import approve_request
+        req = approve_request(body["request_id"])
+        if not req:
+            return bad(handler, "Request not found or already resolved", 404)
+        return j(handler, {"ok": True, "request": req})
+
+    if parsed.path == "/api/agentfs/permission/deny":
+        try:
+            require(body, "request_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs_permissions import deny_request
+        req = deny_request(body["request_id"])
+        if not req:
+            return bad(handler, "Request not found or already resolved", 404)
+        return j(handler, {"ok": True, "request": req})
+
+    # ── AgentFS: skill generation (POST) ──
+    if parsed.path == "/api/agentfs/project/skill/generate":
+        try:
+            require(body, "project_id")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs_skill import generate_project_skill
+        try:
+            result = generate_project_skill(body["project_id"])
+        except ValueError as e:
+            return bad(handler, str(e))
+        return j(handler, {"ok": True, **result})
+
+    if parsed.path == "/api/agentfs/project/charter":
+        try:
+            require(body, "project_id", "charter")
+        except ValueError as e:
+            return bad(handler, str(e))
+        from api.agentfs_skill import update_project_charter
+        ok = update_project_charter(body["project_id"], body["charter"])
+        return j(handler, {"ok": ok})
 
     # ── Session import from JSON (POST) ──
     if parsed.path == "/api/session/import":
@@ -2223,7 +2431,7 @@ def _handle_chat_start(handler, body):
     _agent_provider_id = None
     try:
         from api.employees import list_employees
-        _all_emps = list_employees().get('employees', [])
+        _all_emps = list_employees()
         # Match by profile_name (Hermes) or by session profile field
         if hasattr(s, 'profile') and s.profile:
             for _emp in _all_emps:

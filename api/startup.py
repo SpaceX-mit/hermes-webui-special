@@ -82,3 +82,13 @@ def start_file_watcher() -> None:
         print('[ok] File watcher started (auto-versioning enabled).', flush=True)
     except Exception as e:
         print(f'[!!] File watcher failed to start: {e}', flush=True)
+
+
+def start_agentfs_services() -> None:
+    """Start AgentFS background services (permission cleanup thread)."""
+    try:
+        from api.agentfs_permissions import start_permission_cleanup
+        start_permission_cleanup()
+        print('[ok] AgentFS permission cleanup started.', flush=True)
+    except Exception as e:
+        print(f'[!!] AgentFS services failed to start: {e}', flush=True)

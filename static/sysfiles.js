@@ -165,8 +165,38 @@ function sfMakeTreeItem(rootId, entry, parentRel) {
       item.classList.add('sf-selected');
       sfOpenFile(rootId, entry);
     };
+    // Right-click context menu for files
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      sfShowFileContextMenu(e, rootId, entry);
+    });
   }
   return item;
+}
+
+// ── File context menu ──────────────────────────────────────────────────────
+function sfShowFileContextMenu(e, rootId, entry) {
+  document.getElementById('sfContextMenu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'sfContextMenu';
+  menu.className = 'sf-context-menu';
+  menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;z-index:9999`;
+  const item = document.createElement('div');
+  item.className = 'sf-ctx-item';
+  item.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+    添加到项目
+  `;
+  item.onclick = () => {
+    menu.remove();
+    if (typeof afsAddFileToProject === 'function') afsAddFileToProject(rootId, entry.path);
+  };
+  menu.appendChild(item);
+  document.body.appendChild(menu);
+  // Close on outside click
+  const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', close); } };
+  setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 // ── File preview ───────────────────────────────────────────────────────────

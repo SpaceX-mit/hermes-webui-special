@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent协作文件系统 — PRD v2.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+:root{--bg:#0e1117;--bg-el:#161b22;--bg-card:#1c2129;--bg-card-h:#242b35;--fg:#e6edf3;--fg-m:#8b949e;--fg-d:#484f58;--ac:#e8a83e;--ac-d:rgba(232,168,62,.15);--ac-g:rgba(232,168,62,.3);--ok:#3fb950;--err:#f85149;--info:#58a6ff;--pur:#bc8cff;--pur-d:rgba(188,140,255,.12);--teal:#39d2c0;--teal-d:rgba(57,210,192,.12);--bdr:#30363d;--bdr-l:#21262d;--r:10px;--rl:16px;--sh:0 8px 32px rgba(0,0,0,.4);--tr:.25s cubic-bezier(.4,0,.2,1)}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:var(--bdr) var(--bg)}
+body{font-family:'Noto Sans SC',sans-serif;background:var(--bg);color:var(--fg);line-height:1.75;overflow-x:hidden}
+.atm{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.atm::before{content:'';position:absolute;top:-20%;left:-10%;width:60vw;height:60vw;background:radial-gradient(circle,rgba(232,168,62,.06)0%,transparent 70%);animation:fb 20s ease-in-out infinite}
+.atm::after{content:'';position:absolute;bottom:-20%;right:-10%;width:50vw;height:50vw;background:radial-gradient(circle,rgba(188,140,255,.04)0%,transparent 70%);animation:fb 25s ease-in-out infinite reverse}
+@keyframes fb{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(5%,-8%) scale(1.05)}66%{transform:translate(-3%,5%) scale(.95)}}
+.gtex{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(255,255,255,.015)1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015)1px,transparent 1px);background-size:60px 60px}
+.sb{position:fixed;left:0;top:0;bottom:0;width:256px;background:var(--bg-el);border-right:1px solid var(--bdr);z-index:100;display:flex;flex-direction:column;padding:24px 0;transition:transform var(--tr);overflow-y:auto}
+.sb .logo{padding:0 20px 24px;border-bottom:1px solid var(--bdr);margin-bottom:16px}
+.sb .logo h2{font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--ac)}
+.sb .logo span{font-size:11px;color:var(--fg-d);display:block;margin-top:2px}
+.ns{padding:0 12px;margin-bottom:8px}
+.ns-t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--fg-d);padding:8px 12px 6px}
+.ni{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;font-size:13px;color:var(--fg-m);cursor:pointer;transition:all var(--tr);text-decoration:none;position:relative}
+.ni:hover{background:var(--bg-card);color:var(--fg)}
+.ni.act{background:var(--ac-d);color:var(--ac)}
+.ni.act::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--ac);border-radius:0 3px 3px 0}
+.ni i{width:16px;text-align:center;font-size:12px}
+.nb{margin-left:auto;font-size:9px;padding:1px 6px;border-radius:4px;background:var(--err);color:#fff;font-weight:700}
+.mc{margin-left:256px;position:relative;z-index:1;min-height:100vh}
+.tb{position:sticky;top:0;z-index:50;background:rgba(14,17,23,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr-l);padding:16px 48px;display:flex;align-items:center;justify-content:space-between}
+.tb .bc{font-size:13px;color:var(--fg-m)}
+.tb .bc span{color:var(--fg);font-weight:500}
+.tb-a{display:flex;gap:8px}
+.tb-b{background:var(--bg-card);border:1px solid var(--bdr);color:var(--fg-m);padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;transition:all var(--tr);display:flex;align-items:center;gap:6px;font-family:inherit}
+.tb-b:hover{border-color:var(--ac);color:var(--ac)}
+.cw{max-width:960px;margin:0 auto;padding:48px 48px 120px}
+.ds{margin-bottom:72px;opacity:0;transform:translateY(30px);transition:opacity .6s,transform .6s}
+.ds.vis{opacity:1;transform:translateY(0)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:12px}
+.badge.def{background:var(--ac-d);color:var(--ac)}
+.badge.new{background:var(--pur-d);color:var(--pur)}
+.st{font-family:'Space Grotesk';font-size:32px;font-weight:900;color:var(--fg);margin-bottom:8px;line-height:1.2}
+.ss{font-size:15px;color:var(--fg-m);margin-bottom:32px;max-width:680px}
+.hero{padding:80px 48px 60px;text-align:center}
+.hero .st{font-size:48px;letter-spacing:-1px;margin-bottom:16px}
+.hero .hl{background:linear-gradient(135deg,var(--ac),#f0c674);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero .phil{display:inline-flex;align-items:center;gap:16px;background:var(--bg-card);border:1px solid var(--bdr);border-radius:40px;padding:10px 28px;margin:24px 0 0;font-size:15px}
+.hero .phil .sep{width:4px;height:4px;border-radius:50%;background:var(--fg-d)}
+.hero .phil em{font-style:normal;color:var(--ac);font-weight:700}
+.hero .meta{display:flex;justify-content:center;gap:32px;margin-top:40px;font-size:12px;color:var(--fg-d)}
+.hero .meta div{display:flex;align-items:center;gap:6px}
+.vt{display:inline-flex;align-items:center;gap:4px;background:var(--pur-d);color:var(--pur);font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;margin-left:8px;vertical-align:middle}
+.cg{display:grid;gap:16px}
+.cg.c2{grid-template-columns:repeat(2,1fr)}
+.cg.c3{grid-template-columns:repeat(3,1fr)}
+.ic{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:24px;transition:all var(--tr);overflow:hidden}
+.ic:hover{border-color:var(--ac-g);background:var(--bg-card-h);transform:translateY(-2px);box-shadow:var(--sh)}
+.ic .ci{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:16px}
+.ic h4{font-size:15px;font-weight:700;margin-bottom:8px}
+.ic p{font-size:13px;color:var(--fg-m);line-height:1.7}
+.ct{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;margin-top:12px}
+.pc .ci{background:var(--ac-d);color:var(--ac)}
+.pc:nth-child(2) .ci{background:rgba(63,185,80,.12);color:var(--ok)}
+.pc:nth-child(3) .ci{background:rgba(88,166,255,.12);color:var(--info)}
+.pc:nth-child(4) .ci{background:rgba(248,81,73,.12);color:var(--err)}
+.pc:nth-child(5) .ci{background:var(--pur-d);color:var(--pur)}
+.pnc .ci{background:var(--ac-d);color:var(--ac)}
+.pnc:nth-child(2) .ci{background:rgba(88,166,255,.12);color:var(--info)}
+.pnc:nth-child(3) .ci{background:rgba(63,185,80,.12);color:var(--ok)}
+.mk{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);overflow:hidden;box-shadow:var(--sh)}
+.mk-tb{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--bg-el);border-bottom:1px solid var(--bdr)}
+.mk-dot{width:10px;height:10px;border-radius:50%}
+.mk-dot.r{background:#f85149}.mk-dot.y{background:#e8a83e}.mk-dot.g{background:#3fb950}
+.mk-tb span{margin-left:12px;font-size:12px;color:var(--fg-d)}
+.mk-bd{min-height:200px}
+.mb{padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid var(--bdr);background:var(--bg-card);color:var(--fg-m);transition:all var(--tr);display:flex;align-items:center;gap:6px;font-family:inherit}
+.mb:hover{border-color:var(--fg-d);color:var(--fg)}
+.mb.pr{background:var(--ac);border-color:var(--ac);color:#0e1117;font-weight:600}
+.mb.pr:hover{filter:brightness(1.1)}
+.chip{font-size:11px;padding:4px 10px;border-radius:6px;background:var(--bg-el);border:1px solid var(--bdr);color:var(--fg-m);cursor:pointer;transition:all var(--tr)}
+.chip.act{background:var(--ac-d);border-color:var(--ac);color:var(--ac)}
+.fi{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.fi.pdf{background:rgba(248,81,73,.12);color:var(--err)}.fi.doc{background:rgba(88,166,255,.12);color:var(--info)}.fi.img{background:rgba(63,185,80,.12);color:var(--ok)}.fi.xls{background:rgba(232,168,62,.12);color:var(--ac)}.fi.ppt{background:rgba(248,81,73,.12);color:#ff7b72}
+.pt{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--ac-d);color:var(--ac);font-weight:500}
+.step-ind{display:flex;align-items:center;gap:0;padding:16px 20px;border-bottom:1px solid var(--bdr-l);background:var(--bg-el)}
+.step-i{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-d)}
+.step-i .sn{width:24px;height:24px;border-radius:50%;background:var(--bdr);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'Space Grotesk'}
+.step-i.act .sn{background:var(--ac);color:#0e1117}.step-i.dn .sn{background:var(--ok);color:#fff}
+.step-i.act{color:var(--fg);font-weight:500}.step-i.dn{color:var(--ok)}
+.step-l{width:32px;height:2px;background:var(--bdr);margin:0 8px}
+.step-l.dn{background:var(--ok)}.step-l.act{background:linear-gradient(to right,var(--ok),var(--ac))}
+.chat{display:flex;flex-direction:column;gap:16px;max-width:640px;margin:0 auto}
+.cm{display:flex;gap:12px}
+.cm.usr{flex-direction:row-reverse}
+.cm .av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;font-weight:700}
+.cm.usr .av{background:rgba(232,168,62,.2);color:var(--ac)}
+.cm.agt .av{background:var(--pur-d);color:var(--pur)}
+.cm .bb{max-width:480px;padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.7}
+.cm.usr .bb{background:var(--ac-d);border:1px solid rgba(232,168,62,.2);border-bottom-right-radius:4px}
+.cm.agt .bb{background:var(--bg-el);border:1px solid var(--bdr);border-bottom-left-radius:4px;color:var(--fg-m)}
+.pr{background:var(--bg-card);border:1px solid var(--bdr);border-radius:10px;padding:16px;margin-top:8px}
+.pr h5{font-size:12px;color:var(--ac);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.pf{display:flex;align-items:baseline;gap:8px;font-size:12px;margin-bottom:6px}
+.pf .lb{color:var(--fg-d);min-width:70px;flex-shrink:0}
+.pf .vl{color:var(--fg);font-weight:500}
+.pfs{margin-top:10px;padding:10px;background:var(--bg-el);border-radius:8px;font-size:12px;color:var(--fg-m);line-height:1.8}
+.pfs i{color:var(--ac);margin-right:6px;font-size:11px}
+.acc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+.acc{background:var(--bg-el);border:1px solid var(--bdr);border-radius:10px;padding:14px;cursor:pointer;transition:all var(--tr);position:relative}
+.acc:hover{border-color:var(--fg-d);background:var(--bg-card-h)}
+.acc.sel{border-color:var(--pur);background:var(--pur-d)}
+.acc .ck{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;border:2px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;transition:all var(--tr)}
+.acc.sel .ck{border-color:var(--pur);background:var(--pur);color:#fff}
+.acc .ah{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.acc .ai{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.acc .an{font-size:13px;font-weight:700}
+.acc .ad{font-size:11px;color:var(--fg-d);line-height:1.6}
+.acc .at{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.atg{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600}
+.perm-t{width:36px;height:20px;border-radius:10px;cursor:pointer;transition:all var(--tr);position:relative}
+.perm-t.on{background:var(--ac)}.perm-t.off{background:var(--bdr)}
+.perm-t::after{content:'';position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:all var(--tr)}
+.perm-t.on::after{left:18px}.perm-t.off::after{left:2px}
+.pm{display:grid;grid-template-columns:140px repeat(4,1fr);border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
+.pm-h{display:contents;background:var(--bg-el);border-bottom:1px solid var(--bdr)}
+.pm-h>div{padding:10px 10px;font-size:11px;font-weight:600;color:var(--fg-d);text-align:center;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bdr)}
+.pm-h>div:first-child{text-align:left}
+.pm-r{display:contents}
+.pm-r>div{padding:10px;font-size:13px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--bdr-l);transition:background var(--tr)}
+.pm-r>div:first-child{justify-content:flex-start;color:var(--fg);font-weight:500;font-size:12px}
+.sk-card{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:28px;margin-bottom:16px;position:relative;overflow:hidden}
+.sk-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(to right,var(--pur),var(--ac))}
+.sk-card h4{font-size:17px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.sk-card h4 i{color:var(--pur)}
+.sk-card p{font-size:13px;color:var(--fg-m);line-height:1.8;margin-bottom:16px}
+.sft{background:var(--bg-el);border:1px solid var(--bdr);border-radius:10px;padding:16px 20px;font-size:13px;line-height:2}
+.sft .sf{color:var(--ac);font-weight:600}.sft .ff{color:var(--fg-m)}.sft .fd{color:var(--fg-d);font-size:11px;margin-left:8px}.sft .fn{color:var(--pur);font-size:10px;font-weight:600;margin-left:6px}
+.dg{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.dc{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:24px;transition:all var(--tr)}
+.dc:hover{border-color:var(--ac-g);transform:translateY(-2px);box-shadow:var(--sh)}
+.dc .di{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:16px}
+.dc h4{font-size:15px;font-weight:700;margin-bottom:10px}
+.dc p{font-size:13px;color:var(--fg-m);line-height:1.7;margin-bottom:14px}
+.dl{list-style:none}
+.dl li{font-size:12px;color:var(--fg-m);padding:6px 0;border-bottom:1px solid var(--bdr-l);display:flex;align-items:flex-start;gap:8px;line-height:1.6}
+.dl li:last-child{border-bottom:none}
+.dl li i{color:var(--ac);margin-top:4px;font-size:8px;flex-shrink:0}
+.fc{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:32px;overflow-x:auto}
+.fs{display:flex;align-items:flex-start;gap:0;min-width:max-content}
+.fst{display:flex;flex-direction:column;align-items:center;min-width:148px}
+.fst .fn{width:36px;height:36px;border-radius:50%;background:var(--ac);color:#0e1117;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;font-family:'Space Grotesk';margin-bottom:12px;box-shadow:0 0 20px var(--ac-g)}
+.fst .fc2{background:var(--bg-el);border:1px solid var(--bdr);border-radius:10px;padding:16px;width:148px;text-align:center}
+.fst .fc2 h5{font-size:13px;font-weight:700;margin-bottom:6px}.fst .fc2 p{font-size:11px;color:var(--fg-m);line-height:1.6}
+.act-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;margin-top:8px;font-weight:600}
+.act-tag.u{background:rgba(88,166,255,.12);color:var(--info)}
+.act-tag.a{background:rgba(63,185,80,.12);color:var(--ok)}
+.act-tag.s{background:var(--ac-d);color:var(--ac)}
+.act-tag.m{background:var(--pur-d);color:var(--pur)}
+.fa-arrow{display:flex;align-items:center;padding-top:18px;color:var(--fg-d);font-size:16px;min-width:32px;justify-content:center}
+.fa-arrow.dec{flex-direction:column;padding-top:0;min-width:52px}
+.fa-arrow.dec .al{font-size:10px;color:var(--ac);margin-bottom:4px;font-weight:600}
+.tg{display:flex;gap:4px;background:var(--bg-el);border:1px solid var(--bdr);border-radius:10px;padding:4px;margin-bottom:24px;width:fit-content}
+.tgb{padding:8px 20px;border-radius:8px;border:none;background:transparent;color:var(--fg-m);font-size:13px;font-weight:500;cursor:pointer;transition:all var(--tr);font-family:inherit}
+.tgb:hover{color:var(--fg)}.tgb.act{background:var(--ac);color:#0e1117;font-weight:700}
+.tp{display:none}.tp.act{display:block;animation:fi .3s ease}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.rtw{overflow-x:auto;border:1px solid var(--bdr);border-radius:var(--rl);background:var(--bg-card)}
+.rt{width:100%;border-collapse:collapse;font-size:13px}
+.rt thead{background:var(--bg-el)}
+.rt th{padding:12px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--fg-d);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bdr);white-space:nowrap}
+.rt td{padding:14px;border-bottom:1px solid var(--bdr-l);color:var(--fg-m);vertical-align:top;line-height:1.7}
+.rt tr:last-child td{border-bottom:none}
+.rt tr:hover td{background:var(--bg-card-h)}
+.rt .mn{font-weight:700;color:var(--fg);white-space:nowrap}
+.rt .fn2{font-weight:600;color:var(--fg)}
+.rp{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:700}
+.rp.p0{background:rgba(248,81,73,.12);color:var(--err)}
+.rp.p1{background:rgba(232,168,62,.12);color:var(--ac)}
+.rp.p2{background:rgba(88,166,255,.12);color:var(--info)}
+.nfg{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.nc{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:24px;transition:all var(--tr)}
+.nc:hover{border-color:var(--ac-g);transform:translateY(-2px);box-shadow:var(--sh)}
+.nc .ni{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:16px}
+.nc h4{font-size:15px;font-weight:700;margin-bottom:12px}
+.nl{list-style:none}
+.nl li{font-size:12px;color:var(--fg-m);padding:6px 0;border-bottom:1px solid var(--bdr-l);display:flex;align-items:flex-start;gap:8px;line-height:1.6}
+.nl li:last-child{border-bottom:none}
+.nl li i{color:var(--ac);margin-top:4px;font-size:8px;flex-shrink:0}
+.tgg{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.tc2{background:var(--bg-card);border:1px solid var(--bdr);border-radius:var(--rl);padding:20px;display:flex;gap:16px;transition:all var(--tr)}
+.tc2:hover{border-color:var(--ac-g);transform:translateY(-2px);box-shadow:var(--sh)}
+.tc2 .ti{width:44px;height:44px;border-radius:10px;background:var(--ac-d);color:var(--ac);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.tc2 h4{font-size:14px;font-weight:700;margin-bottom:4px}
+.tc2 .tp2{font-size:12px;color:var(--fg-m);margin-bottom:8px}
+.tt{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-el);color:var(--fg-d);font-family:'Space Grotesk',monospace;margin-right:4px}
+.sdv{height:1px;background:linear-gradient(to right,transparent,var(--bdr),transparent);margin:48px 0}
+.co{padding:16px 20px;border-radius:10px;margin:16px 0;font-size:13px;display:flex;gap:12px;align-items:flex-start}
+.co i{margin-top:3px;flex-shrink:0}
+.co.info{background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.15);color:var(--info)}
+.co.warn{background:rgba(232,168,62,.06);border:1px solid rgba(232,168,62,.15);color:var(--ac)}
+.co.ok{background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.15);color:var(--ok)}
+.co.pur{background:var(--pur-d);border:1px solid rgba(188,140,255,.2);color:var(--pur)}
+code{background:var(--bg-el);padding:1px 6px;border-radius:4px;font-size:12px}
+.sp{position:fixed;top:0;left:256px;right:0;height:2px;z-index:200;background:var(--bdr-l)}
+.sp-f{height:100%;background:var(--ac);width:0%;transition:width .1s linear}
+.btt{position:fixed;bottom:32px;right:32px;width:40px;height:40px;border-radius:10px;background:var(--ac);color:#0e1117;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;z-index:100;opacity:0;transform:translateY(10px);transition:all var(--tr);border:none;box-shadow:0 4px 16px var(--ac-g)}
+.btt.vis{opacity:1;transform:translateY(0)}.btt:hover{filter:brightness(1.15)}
+.mtg{display:none;position:fixed;top:16px;left:16px;z-index:200;width:40px;height:40px;border-radius:10px;background:var(--bg-card);border:1px solid var(--bdr);color:var(--fg);font-size:16px;cursor:pointer;align-items:center;justify-content:center}
+.sbo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:90}
+#toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg-card);border:1px solid var(--bdr);padding:12px 24px;border-radius:10px;font-size:13px;color:var(--fg);z-index:1000;opacity:0;transition:all .35s;pointer-events:none;box-shadow:var(--sh);display:flex;align-items:center;gap:8px}
+@media(max-width:1024px){
+.sb{transform:translateX(-100%)}.sb.open{transform:translateX(0)}.sbo.open{display:block}.mc{margin-left:0}.mtg{display:flex}
+.tb{padding:16px 20px 16px 64px}.hero{padding:60px 20px 40px}.hero .st{font-size:32px}.cw{padding:32px 20px 80px}
+.cg.c2,.cg.c3,.nfg,.tgg,.dg{grid-template-columns:1fr}.acc-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="atm"></div>
+<div class="gtex"></div>
+<div class="sp"><div class="sp-f" id="spf"></div></div>
+<button class="mtg" id="mtg" aria-label="菜单"><i class="fas fa-bars"></i></button>
+<div class="sbo" id="sbo"></div>
+
+<nav class="sb" id="sb">
+<div class="logo"><h2>AgentFS</h2><span>协作文件系统 PRD v2.1</span></div>
+<div class="ns"><div class="ns-t">概述</div>
+<a class="ni act" href="#ov" data-s="ov"><i class="fas fa-book"></i>文档概述</a>
+<a class="ni" href="#usr" data-s="usr"><i class="fas fa-users"></i>目标用户</a>
+<a class="ni" href="#pri" data-s="pri"><i class="fas fa-compass"></i>设计原则</a></div>
+<div class="ns"><div class="ns-t">UI 设计</div>
+<a class="ni" href="#ps" data-s="ps"><i class="fas fa-folder"></i>个人空间</a>
+<a class="ni" href="#pj" data-s="pj"><i class="fas fa-project-diagram"></i>项目空间</a>
+<a class="ni" href="#cp" data-s="cp"><i class="fas fa-plus-circle"></i>创建项目<span class="nb">NEW</span></a>
+<a class="ni" href="#ao" data-s="ao"><i class="fas fa-sitemap"></i>Agent编排<span class="nb">NEW</span></a>
+<a class="ni" href="#cg" data-s="cg"><i class="fas fa-bezier-curve"></i>协作关系图<span class="nb">NEW</span></a>
+<a class="ni" href="#pm" data-s="pm"><i class="fas fa-shield-alt"></i>权限配置</a></div>
+<div class="ns"><div class="ns-t">核心概念</div>
+<a class="ni" href="#sk" data-s="sk"><i class="fas fa-cube"></i>项目Skill化<span class="nb">NEW</span></a>
+<a class="ni" href="#dm" data-s="dm"><i class="fas fa-cogs"></i>自驱动机制<span class="nb">NEW</span></a></div>
+<div class="ns"><div class="ns-t">流程与需求</div>
+<a class="ni" href="#fl" data-s="fl"><i class="fas fa-magic"></i>业务流程</a>
+<a class="ni" href="#rq" data-s="rq"><i class="fas fa-clipboard-list"></i>功能需求</a>
+<a class="ni" href="#nf" data-s="nf"><i class="fas fa-tachometer-alt"></i>非功能需求</a>
+<a class="ni" href="#tl" data-s="tl"><i class="fas fa-wrench"></i>工具选型</a></div>
+</nav>
+
+<div class="mc">
+<div class="tb">
+<div class="bc">AgentFS <i class="fas fa-chevron-right" style="font-size:8px;margin:0 6px;color:var(--fg-d)"></i> <span id="csec">文档概述</span></div>
+<div class="tb-a">
+<button class="tb-b" onclick="showToast('文档导出准备中...','fas fa-file-export','var(--info)')"><i class="fas fa-download"></i>导出</button>
+<button class="tb-b" onclick="showToast('分享链接已复制','fas fa-link','var(--ac)')"><i class="fas fa-share-alt"></i>分享</button>
+</div></div>
+
+<div class="cw">
+
+<!-- Hero -->
+<section class="hero ds vis" id="ov">
+<div class="badge def"><i class="fas fa-star"></i> 核心理念</div>
+<h1 class="st">Agent协作文件系统<br><span class="hl">UI/UX设计与PRD</span><span class="vt"><i class="fas fa-rocket"></i> v2.1</span></h1>
+<p class="ss" style="margin:0 auto;text-align:center;">将"存储按事，交互按人"的理念转化为可落地的界面与流程。v2.1 新增项目创建、Agent编排、协作关系图与自驱动机制。</p>
+<div class="phil"><span>存储按<em>事</em></span><span class="sep"></span><span>交互按<em>人</em></span><span class="sep"></span><span>智能<em>赋能</em></span><span class="sep"></span><span>自<em>驱动</em></span></div>
+<div class="meta"><div><i class="far fa-calendar"></i> 2025-06-16</div><div><i class="far fa-file-alt"></i> v2.1</div><div><i class="fas fa-lock"></i> 内部机密</div></div>
+</section>
+<div class="sdv"></div>
+
+<!-- 目标用户 -->
+<section class="ds" id="usr">
+<div class="badge def"><i class="fas fa-users"></i> 第1章</div>
+<h2 class="st">目标用户</h2>
+<p class="ss">三类用户画像覆盖从零基础到高级定制的全光谱场景。</p>
+<div class="cg c3">
+<div class="ic pnc"><div class="ci"><i class="fas fa-user"></i></div><h4>非技术普通用户</h4><p>只管上传下载分享，不懂文件夹逻辑，期望"丢进去就能找到"。</p><div style="margin-top:12px"><span style="font-size:11px;color:var(--fg-d)">核心诉求</span><br><span style="font-size:12px;color:var(--ac)">零学习成本，上传即分类</span></div><span class="ct" style="background:rgba(88,166,255,.12);color:var(--info)">~60%</span></div>
+<div class="ic pnc"><div class="ci"><i class="fas fa-user-friends"></i></div><h4>协作用户</h4><p>参与团队项目，关注"哪些文件属于这个项目"，而非"文件在哪个目录"。</p><div style="margin-top:12px"><span style="font-size:11px;color:var(--fg-d)">核心诉求</span><br><span style="font-size:12px;color:var(--info)">按项目聚合，权限透明</span></div><span class="ct" style="background:var(--ac-d);color:var(--ac)">~30%</span></div>
+<div class="ic pnc"><div class="ci"><i class="fas fa-user-cog"></i></div><h4>进阶用户</h4><p>希望掌控分类规则、自定义项目结构、编排Agent团队。</p><div style="margin-top:12px"><span style="font-size:11px;color:var(--fg-d)">核心诉求</span><br><span style="font-size:12px;color:var(--ok)">精细控制，可干预可审计</span></div><span class="ct" style="background:rgba(63,185,80,.12);color:var(--ok)">~10%</span></div>
+</div></section>
+<div class="sdv"></div>
+
+<!-- 设计原则 -->
+<section class="ds" id="pri">
+<div class="badge def"><i class="fas fa-compass"></i> 第2章</div>
+<h2 class="st">核心设计原则</h2>
+<p class="ss">五项北极星原则，v2.1 新增"自驱动闭环"。</p>
+<div class="cg c2">
+<div class="ic pc"><div class="ci"><i class="fas fa-hand-pointer"></i></div><h4>直觉优先</h4><p>上传=完成，查找=搜索，协作=进项目。消除认知负担。</p></div>
+<div class="ic pc"><div class="ci"><i class="fas fa-brain"></i></div><h4>智能赋能</h4><p>Agent自动分类、推荐关联、预测权限。用户只觉得"系统很懂我"。</p></div>
+<div class="ic pc"><div class="ci"><i class="fas fa-layer-group"></i></div><h4>渐进披露</h4><p>基础操作暴露最少信息，高级功能（权限矩阵、Agent编排）仅在需要时展开。</p></div>
+<div class="ic pc"><div class="ci"><i class="fas fa-shield-alt"></i></div><h4>权限即边界</h4><p>权限不等于限制，而是明确边界。越界操作有明确引导而非静默失败。</p></div>
+<div class="ic pc" style="grid-column:1/-1"><div class="ci"><i class="fas fa-sync-alt"></i></div><h4>自驱动闭环 <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--pur-d);color:var(--pur);font-weight:600;margin-left:6px">v2.1</span></h4><p>项目是有生命周期的自驱动单元。定时任务驱动周期性检查，用户确认通知驱动关键节点推进。Agent完成工作后写文件告知下一环节，形成无人值守的推进链。</p></div>
+</div></section>
+<div class="sdv"></div>
+
+<!-- 个人空间 -->
+<section class="ds" id="ps">
+<div class="badge def"><i class="fas fa-folder"></i> 3.1</div>
+<h2 class="st">个人空间界面</h2>
+<p class="ss">默认视图，以时间线+搜索为核心，用户看到"我的文件"。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>个人空间 — 我的文件</span></div>
+<div class="mk-bd" style="padding:16px 20px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div style="display:flex;align-items:center;gap:12px"><h3 style="font-size:16px;font-weight:700">我的文件</h3><span style="font-size:12px;color:var(--fg-d)">24 个文件</span></div>
+<div style="display:flex;gap:8px"><button class="mb"><i class="fas fa-th-large"></i> 网格</button><button class="mb" style="border-color:var(--ac);color:var(--ac)"><i class="fas fa-list"></i> 列表</button><button class="mb pr"><i class="fas fa-plus"></i> 上传</button></div></div>
+<div style="display:flex;gap:8px;margin-bottom:12px"><div style="flex:1;background:var(--bg-el);border:1px solid var(--bdr);border-radius:8px;padding:7px 12px;font-size:12px;color:var(--fg-d);display:flex;align-items:center;gap:8px"><i class="fas fa-search" style="font-size:11px"></i>搜索文件名、内容、标签...</div>
+<div style="display:flex;gap:6px"><span class="chip act">全部</span><span class="chip">文档</span><span class="chip">图片</span><span class="chip">表格</span></div></div>
+<div style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,rgba(232,168,62,.08),rgba(232,168,62,.02));border:1px dashed rgba(232,168,62,.3);border-radius:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--fg-m)"><i class="fas fa-project-diagram" style="color:var(--ac)"></i> 3个文件被关联到「Q2营销方案」</div>
+<div style="font-size:12px;color:var(--ac)"><i class="fas fa-arrow-right" style="font-size:10px"></i></div></div>
+<div style="display:grid;grid-template-columns:1fr 80px 1fr 80px 32px;gap:12px;padding:8px 12px;font-size:11px;color:var(--fg-d);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bdr-l);font-weight:600"><div>文件名</div><div>大小</div><div>所属项目</div><div>时间</div><div></div></div>
+<div style="display:grid;grid-template-columns:1fr 80px 1fr 80px 32px;gap:12px;padding:10px 12px;font-size:13px;border-radius:8px;cursor:pointer;transition:all var(--tr);align-items:center" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''">
+<div style="display:flex;align-items:center;gap:10px"><div class="fi pdf"><i class="fas fa-file-pdf"></i></div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><div>产品需求文档_v2.1.pdf</div><small style="font-size:11px;color:var(--fg-d)">Agent自动分类</small></div></div>
+<div style="color:var(--fg-m);font-size:12px">2.4 MB</div><div style="display:flex;gap:4px"><span class="pt">Q2营销方案</span></div>
+<div style="color:var(--fg-m);font-size:12px">2分钟前</div><div style="color:var(--fg-d);cursor:pointer"><i class="fas fa-ellipsis-h"></i></div></div>
+<div style="display:grid;grid-template-columns:1fr 80px 1fr 80px 32px;gap:12px;padding:10px 12px;font-size:13px;border-radius:8px;cursor:pointer;transition:all var(--tr);align-items:center" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''">
+<div style="display:flex;align-items:center;gap:10px"><div class="fi doc"><i class="fas fa-file-word"></i></div><div><div>竞品分析报告.docx</div><small style="font-size:11px;color:var(--fg-d)">手动上传</small></div></div>
+<div style="color:var(--fg-m);font-size:12px">856 KB</div><div style="display:flex;gap:4px"><span class="pt">Q2营销方案</span></div>
+<div style="color:var(--fg-m);font-size:12px">15分钟前</div><div style="color:var(--fg-d);cursor:pointer"><i class="fas fa-ellipsis-h"></i></div></div>
+<div style="display:grid;grid-template-columns:1fr 80px 1fr 80px 32px;gap:12px;padding:10px 12px;font-size:13px;border-radius:8px;cursor:pointer;transition:all var(--tr);align-items:center" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''">
+<div style="display:flex;align-items:center;gap:10px"><div class="fi img"><i class="fas fa-file-image"></i></div><div><div>首页设计稿_v3.png</div><small style="font-size:11px;color:var(--fg-d)">手动上传</small></div></div>
+<div style="color:var(--fg-m);font-size:12px">4.1 MB</div><div style="display:flex;gap:4px"><span class="pt" style="background:rgba(88,166,255,.12);color:var(--info)">官网改版</span></div>
+<div style="color:var(--fg-m);font-size:12px">1小时前</div><div style="color:var(--fg-d);cursor:pointer"><i class="fas fa-ellipsis-h"></i></div></div>
+</div></div></section>
+<div class="sdv"></div>
+
+<!-- 项目空间 -->
+<section class="ds" id="pj">
+<div class="badge def"><i class="fas fa-project-diagram"></i> 3.2</div>
+<h2 class="st">项目空间界面</h2>
+<p class="ss">逻辑视图，创建新项目后自动生成。聚合来自不同用户的关联文件，展示Agent参与数。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>项目空间 — 官网改版</span></div>
+<div class="mk-bd" style="display:flex;height:380px">
+<div style="width:200px;border-right:1px solid var(--bdr);padding:16px;flex-shrink:0">
+<div style="font-size:12px;color:var(--fg-d);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;font-weight:600">我的项目</div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;cursor:pointer;margin-bottom:4px;transition:all var(--tr)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;background:rgba(248,81,73,.12);color:var(--err);flex-shrink:0"><i class="fas fa-bullhorn"></i></div><div><div style="font-size:13px;font-weight:600">Q2营销方案</div><div style="font-size:11px;color:var(--fg-d)">8文件·3人·2 Agent</div></div></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;cursor:pointer;margin-bottom:4px;background:var(--ac-d)"><div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;background:rgba(88,166,255,.12);color:var(--info);flex-shrink:0"><i class="fas fa-globe"></i></div><div><div style="font-size:13px;font-weight:600;color:var(--ac)">官网改版</div><div style="font-size:11px;color:var(--fg-d)">15文件·5人·4 Agent</div></div></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;cursor:pointer;margin-bottom:4px;opacity:.5" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;background:var(--bg-el);color:var(--fg-d);border:1px dashed var(--bdr)"><i class="fas fa-plus"></i></div><div><div style="font-size:13px;color:var(--fg-d)">创建新项目</div></div></div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column">
+<div style="padding:14px 20px;border-bottom:1px solid var(--bdr-l);display:flex;align-items:center;justify-content:space-between">
+<h3 style="font-size:15px;font-weight:700"><i class="fas fa-globe" style="color:var(--info);margin-right:8px;font-size:14px"></i>官网改版</h3>
+<div style="font-size:12px;color:var(--fg-d);display:flex;gap:14px"><span><i class="fas fa-file"></i> 15</span><span><i class="fas fa-users"></i> 5</span><span><i class="fas fa-robot" style="color:var(--pur)"></i> 4</span></div></div>
+<div style="padding:16px 20px;flex:1;overflow-y:auto;font-size:13px;line-height:2.2">
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--ac);font-weight:600;cursor:pointer"><i class="fas fa-folder-open" style="font-size:12px;color:var(--ac)"></i> 需求文档 <span style="margin-left:auto;font-size:10px;color:var(--fg-d);background:var(--bg-el);padding:1px 6px;border-radius:4px">4</span></div>
+<div style="padding-left:20px">
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;background:var(--ac-d);color:var(--ac)"><i class="fas fa-file-pdf" style="font-size:12px;color:var(--err)"></i> PRD_官网改版.pdf</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--fg-m)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><i class="fas fa-file-word" style="font-size:12px;color:var(--info)"></i> 用户故事地图.docx</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--fg-m)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><i class="fas fa-file-excel" style="font-size:12px;color:var(--ac)"></i> 功能清单.xlsx</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--fg-m)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><i class="fas fa-folder" style="font-size:12px;color:var(--ac)"></i> 设计稿 <span style="margin-left:auto;font-size:10px;color:var(--fg-d);background:var(--bg-el);padding:1px 6px;border-radius:4px">7</span></div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--fg-m)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><i class="fas fa-folder" style="font-size:12px;color:var(--ac)"></i> 开发资源 <span style="margin-left:auto;font-size:10px;color:var(--fg-d);background:var(--bg-el);padding:1px 6px;border-radius:4px">3</span></div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--fg-m)" onmouseover="this.style.background='var(--bg-card-h)'" onmouseout="this.style.background=''"><i class="fas fa-folder" style="font-size:12px;color:var(--ac)"></i> 测试报告 <span style="margin-left:auto;font-size:10px;color:var(--fg-d);background:var(--bg-el);padding:1px 6px;border-radius:4px">1</span></div>
+</div></div>
+<div style="width:240px;border-left:1px solid var(--bdr);padding:16px;flex-shrink:0;overflow-y:auto">
+<div style="font-size:12px;color:var(--fg-d);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;font-weight:600">文件详情</div>
+<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:var(--ac-d);margin-bottom:12px"><div class="fi pdf" style="width:24px;height:24px;font-size:10px"><i class="fas fa-file-pdf"></i></div><span style="font-size:12px;flex:1">PRD_官网改版.pdf</span><span style="font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;background:rgba(63,185,80,.12);color:var(--ok)">拥有者</span></div>
+<div style="font-size:11px;color:var(--fg-d);padding:8px 0;border-top:1px solid var(--bdr-l)">
+<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>上传者</span><span style="color:var(--fg)">张明</span></div>
+<div style="display:flex;justify-content:space-between"><span>大小</span><span style="color:var(--fg)">2.4 MB</span></div></div>
+<div style="margin-top:16px;padding:12px;background:linear-gradient(135deg,rgba(232,168,62,.08),transparent);border:1px solid rgba(232,168,62,.2);border-radius:10px">
+<div style="font-size:11px;color:var(--ac);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:6px"><i class="fas fa-magic"></i> 智能推荐</div>
+<div style="font-size:12px;color:var(--fg-m);margin-bottom:8px">以下文件可能与项目相关：</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-m);padding:4px 8px;background:var(--bg-el);border-radius:6px;cursor:pointer"><i class="fas fa-plus" style="color:var(--ac);font-size:10px"></i> 竞品分析报告.docx</div>
+<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-m);padding:4px 8px;background:var(--bg-el);border-radius:6px;cursor:pointer"><i class="fas fa-plus" style="color:var(--ac);font-size:10px"></i> 首页设计稿_v3.png</div></div></div>
+</div></div></div></div></section>
+<div class="sdv"></div>
+
+<!-- 创建项目 -->
+<section class="ds" id="cp">
+<div class="badge new"><i class="fas fa-plus-circle"></i> 3.3 NEW</div>
+<h2 class="st">创建项目：自然语言驱动</h2>
+<p class="ss">用户一句话描述，Agent解析意图、生成项目结构、初始化文档视图和 _project/ 元数据目录。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>创建项目 — 对话式引导</span></div>
+<div class="mk-bd">
+<div class="step-ind">
+<div class="step-i dn"><div class="sn"><i class="fas fa-check" style="font-size:10px"></i></div>描述需求</div><div class="step-l dn"></div>
+<div class="step-i dn"><div class="sn"><i class="fas fa-check" style="font-size:10px"></i></div>解析确认</div><div class="step-l act"></div>
+<div class="step-i act"><div class="sn">3</div>选择Agent</div><div class="step-l"></div>
+<div class="step-i"><div class="sn">4</div>完成</div></div>
+<div style="padding:24px 20px">
+<div class="chat">
+<div class="cm usr"><div class="av">张</div><div class="bb">帮我创建一个官网改版项目，需要涵盖需求分析、设计、开发、测试四个阶段，周期大概两个月。</div></div>
+<div class="cm agt"><div class="av"><i class="fas fa-robot"></i></div><div class="bb">已解析您的需求，生成以下方案：<div class="pr"><h5><i class="fas fa-puzzle-piece"></i> 项目解析结果</h5>
+<div class="pf"><span class="lb">项目名称</span><span class="vl">官网改版</span></div>
+<div class="pf"><span class="lb">项目周期</span><span class="vl">约 8 周（06-16 ~ 08-10）</span></div>
+<div class="pf"><span class="lb">阶段划分</span><span class="vl">需求分析 → 设计 → 开发 → 测试</span></div>
+<div class="pfs"><i class="fas fa-folder-open"></i>官网改版/<br>&nbsp;&nbsp;<i class="fas fa-folder"></i>01-需求分析/<br>&nbsp;&nbsp;&nbsp;&nbsp;<i class="fas fa-file-alt"></i>项目说明.md<br>&nbsp;&nbsp;&nbsp;&nbsp;<i class="fas fa-file-alt"></i>需求清单.md<br>&nbsp;&nbsp;<i class="fas fa-folder"></i>02-设计/<br>&nbsp;&nbsp;<i class="fas fa-folder"></i>03-开发/<br>&nbsp;&nbsp;<i class="fas fa-folder"></i>04-测试/<br>&nbsp;&nbsp;<i class="fas fa-folder"></i>_project/<span style="color:var(--pur);font-size:10px;font-weight:600;margin-left:6px">自动生成</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<i class="fas fa-file-alt"></i>collab-graph.md<br>&nbsp;&nbsp;&nbsp;&nbsp;<i class="fas fa-file-alt"></i>skill-*.md<br>&nbsp;&nbsp;&nbsp;&nbsp;<i class="fas fa-file-alt"></i>drive-config.yaml</div></div>结构OK吗？确认后进入Agent配置。</div></div>
+<div class="cm usr"><div class="av">张</div><div class="bb">没问题，继续。</div></div>
+</div></div></div></div>
+<div class="co pur"><i class="fas fa-info-circle"></i><span><strong>关键设计：</strong>Agent自动生成 <code>_project/</code> 隐藏目录存放项目级元数据。普通用户不可见，进阶用户和Agent可见。</span></div>
+</section>
+<div class="sdv"></div>
+
+<!-- Agent编排 -->
+<section class="ds" id="ao">
+<div class="badge new"><i class="fas fa-sitemap"></i> 3.4 NEW</div>
+<h2 class="st">Agent编排：点兵点将</h2>
+<p class="ss">从Agent目录中选择已有Agent或创建新Agent，定义每个Agent的角色、职责边界和输入输出关系。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>Agent编排 — 官网改版</span></div>
+<div class="mk-bd" style="padding:20px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="display:flex;gap:6px"><span class="chip act">全部</span><span class="chip">已有Agent</span><span class="chip">模板</span></div><button class="mb" style="border-color:var(--pur);color:var(--pur)"><i class="fas fa-plus"></i> 创建新Agent</button></div>
+<div class="acc-grid">
+<div class="acc sel" onclick="this.classList.toggle('sel')"><div class="ck"><i class="fas fa-check"></i></div><div class="ah"><div class="ai" style="background:var(--pur-d);color:var(--pur)"><i class="fas fa-robot"></i></div><div class="an">PM-Agent</div></div><div class="ad">产品经理Agent，负责需求分析、用户故事编写、优先级排序。</div><div class="at"><span class="atg" style="background:var(--pur-d);color:var(--pur)">需求分析</span><span class="atg" style="background:rgba(88,166,255,.12);color:var(--info)">文档</span><span class="atg" style="background:var(--ac-d);color:var(--ac)">已有</span></div></div>
+<div class="acc sel" onclick="this.classList.toggle('sel')"><div class="ck"><i class="fas fa-check"></i></div><div class="ah"><div class="ai" style="background:var(--teal-d);color:var(--teal)"><i class="fas fa-palette"></i></div><div class="an">Design-Agent</div></div><div class="ad">设计Agent，根据PRD生成设计规范、配色方案、组件库建议。</div><div class="at"><span class="atg" style="background:var(--teal-d);color:var(--teal)">UI设计</span><span class="atg" style="background:rgba(88,166,255,.12);color:var(--info)">规范</span><span class="atg" style="background:var(--ac-d);color:var(--ac)">已有</span></div></div>
+<div class="acc sel" onclick="this.classList.toggle('sel')"><div class="ck"><i class="fas fa-check"></i></div><div class="ah"><div class="ai" style="background:rgba(63,185,80,.12);color:var(--ok)"><i class="fas fa-code"></i></div><div class="an">Dev-Agent</div></div><div class="ad">开发Agent，根据设计稿和PRD编写前端代码，支持多框架。</div><div class="at"><span class="atg" style="background:rgba(63,185,80,.12);color:var(--ok)">开发</span><span class="atg" style="background:rgba(88,166,255,.12);color:var(--info)">代码生成</span><span class="atg" style="background:var(--ac-d);color:var(--ac)">已有</span></div></div>
+<div class="acc" onclick="this.classList.toggle('sel')"><div class="ck"><i class="fas fa-check"></i></div><div class="ah"><div class="ai" style="background:rgba(248,81,73,.12);color:var(--err)"><i class="fas fa-bug"></i></div><div class="an">QA-Agent</div></div><div class="ad">测试Agent，生成测试用例、执行自动化测试、输出报告。</div><div class="at"><span class="atg" style="background:rgba(248,81,73,.12);color:var(--err)">测试</span><span class="atg" style="background:var(--pur-d);color:var(--pur)">模板</span></div></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--bdr-l)"><button class="mb">上一步</button><button class="mb pr">确认，生成协作图 <i class="fas fa-arrow-right" style="font-size:10px"></i></button></div>
+</div></div></section>
+<div class="sdv"></div>
+
+<!-- 协作关系图 -->
+<section class="ds" id="cg">
+<div class="badge new"><i class="fas fa-bezier-curve"></i> 3.5 NEW</div>
+<h2 class="st">Agent协作关系图</h2>
+<p class="ss">项目创建后自动生成的"说明书"。展示Agent间数据流、依赖关系、交接协议，是项目自驱动的依据。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>协作关系图 — _project/collab-graph.md</span></div>
+<div class="mk-bd" style="padding:20px;position:relative">
+<svg viewBox="0 0 760 340" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="var(--ac)" opacity=".6"/></marker>
+<marker id="ahp" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="var(--pur)" opacity=".6"/></marker>
+<marker id="ahg" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="var(--ok)" opacity=".6"/></marker>
+<marker id="aht" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="var(--teal)" opacity=".6"/></marker></defs>
+<line x1="120" y1="70" x2="258" y2="70" stroke="var(--ac)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#ah)" opacity=".5"/><text x="189" y="62" fill="var(--fg-d)" font-size="10" text-anchor="middle">需求描述</text>
+<line x1="360" y1="70" x2="458" y2="70" stroke="var(--ac)" stroke-width="2" marker-end="url(#ah)" opacity=".5"/><text x="409" y="62" fill="var(--fg-d)" font-size="10" text-anchor="middle">PRD文档</text>
+<line x1="560" y1="95" x2="560" y2="188" stroke="var(--ac)" stroke-width="2" marker-end="url(#ah)" opacity=".5"/><text x="576" y="145" fill="var(--fg-d)" font-size="10">设计稿</text>
+<line x1="510" y1="240" x2="170" y2="240" stroke="var(--ok)" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#ahg)" opacity=".5"/><text x="340" y="232" fill="var(--ok)" font-size="10" text-anchor="middle">代码交付+通知</text>
+<path d="M360 95 Q360 170 458 215" stroke="var(--pur)" stroke-width="1.5" stroke-dasharray="4,4" fill="none" marker-end="url(#ahp)" opacity=".35"/><text x="385" y="165" fill="var(--pur)" font-size="9" opacity=".7">需求变更</text>
+<line x1="170" y1="296" x2="258" y2="95" stroke="var(--teal)" stroke-width="1.5" stroke-dasharray="4,4" opacity=".35"/>
+<rect x="40" y="45" width="80" height="50" rx="10" fill="var(--ac-d)" stroke="var(--ac)" stroke-width="1.5"/><text x="80" y="67" fill="var(--ac)" font-size="12" text-anchor="middle" font-weight="700">用户</text><text x="80" y="83" fill="var(--fg-d)" font-size="9" text-anchor="middle">张明</text>
+<rect x="260" y="45" width="100" height="50" rx="10" fill="var(--pur-d)" stroke="var(--pur)" stroke-width="1.5"/><text x="310" y="67" fill="var(--pur)" font-size="12" text-anchor="middle" font-weight="700">PM-Agent</text><text x="310" y="83" fill="var(--fg-d)" font-size="9" text-anchor="middle">需求阶段</text>
+<rect x="460" y="45" width="120" height="50" rx="10" fill="var(--teal-d)" stroke="var(--teal)" stroke-width="1.5"/><text x="520" y="67" fill="var(--teal)" font-size="12" text-anchor="middle" font-weight="700">Design-Agent</text><text x="520" y="83" fill="var(--fg-d)" font-size="9" text-anchor="middle">设计阶段</text>
+<rect x="460" y="195" width="120" height="50" rx="10" fill="rgba(63,185,80,.12)" stroke="var(--ok)" stroke-width="1.5"/><text x="520" y="217" fill="var(--ok)" font-size="12" text-anchor="middle" font-weight="700">Dev-Agent</text><text x="520" y="233" fill="var(--fg-d)" font-size="9" text-anchor="middle">开发阶段</text>
+<rect x="90" y="217" width="80" height="46" rx="10" fill="rgba(232,168,62,.08)" stroke="var(--ac)" stroke-width="1" stroke-dasharray="4,4"/><text x="130" y="238" fill="var(--fg-m)" font-size="11" text-anchor="middle" font-weight="500">用户确认</text><text x="130" y="253" fill="var(--fg-d)" font-size="9" text-anchor="middle">通知驱动</text>
+<rect x="50" y="276" width="130" height="36" rx="8" fill="var(--bg-el)" stroke="var(--bdr)"/><text x="115" y="298" fill="var(--teal)" font-size="11" text-anchor="middle" font-weight="600">定时巡检</text>
+<rect x="170" y="155" width="82" height="20" rx="4" fill="var(--bg-card)" stroke="var(--bdr)"/><text x="211" y="169" fill="var(--fg-m)" font-size="9" text-anchor="middle">需求清单.md</text>
+<rect x="390" y="155" width="82" height="20" rx="4" fill="var(--bg-card)" stroke="var(--bdr)"/><text x="431" y="169" fill="var(--fg-m)" font-size="9" text-anchor="middle">设计规范.md</text>
+<rect x="390" y="270" width="92" height="20" rx="4" fill="var(--bg-card)" stroke="var(--bdr)"/><text x="436" y="284" fill="var(--fg-m)" font-size="9" text-anchor="middle">代码交付说明.md</text>
+</svg>
+<div style="position:absolute;bottom:8px;right:16px;font-size:10px;color:var(--fg-d);display:flex;gap:12px">
+<span><span style="width:8px;height:8px;border-radius:50%;background:var(--ac);display:inline-block;margin-right:4px"></span>数据流</span>
+<span><span style="width:8px;height:8px;border-radius:50%;background:var(--pur);display:inline-block;margin-right:4px"></span>间接依赖</span>
+<span><span style="width:8px;height:8px;border-radius:50%;background:var(--teal);display:inline-block;margin-right:4px"></span>定时驱动</span>
+<span><span style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:4px"></span>交付/通知</span>
+</div></div></div>
+<div class="co info"><i class="fas fa-file-alt"></i><span><strong>双重身份：</strong>既是人类可读的 collab-graph.md，也有结构化 collab-graph.yaml 供程序读取。</span></div>
+</section>
+<div class="sdv"></div>
+
+<!-- 权限配置 -->
+<section class="ds" id="pm">
+<div class="badge def"><i class="fas fa-shield-alt"></i> 3.6</div>
+<h2 class="st">权限配置界面</h2>
+<p class="ss">Agent权限按项目阶段自动分配，用户可微调。新增"交接给下阶段"权限。</p>
+<div class="mk"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>权限配置 — PM-Agent @ 官网改版</span></div>
+<div class="mk-bd" style="padding:20px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+<h3 style="font-size:16px;font-weight:700">PM-Agent 权限 <span style="font-size:12px;color:var(--fg-d);font-weight:400;margin-left:8px">自动分配·需求阶段</span></h3>
+<div style="display:flex;gap:8px"><button class="mb"><i class="fas fa-crown"></i> 全部</button><button class="mb"><i class="fas fa-eye"></i> 只读</button><button class="mb"><i class="fas fa-ban"></i> 自定义</button></div></div>
+<div class="pm">
+<div class="pm-h"><div>权限项</div><div>需求文档</div><div>设计稿</div><div>开发资源</div><div>测试报告</div></div>
+<div class="pm-r"><div><i class="fas fa-eye" style="color:var(--info);margin-right:6px;font-size:11px"></i>查看</div><div><div class="perm-t on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div></div>
+<div class="pm-r"><div><i class="fas fa-edit" style="color:var(--ac);margin-right:6px;font-size:11px"></i>编辑</div><div><div class="perm-t on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div></div>
+<div class="pm-r"><div><i class="fas fa-plus-circle" style="color:var(--ok);margin-right:6px;font-size:11px"></i>创建</div><div><div class="perm-t on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div></div>
+<div class="pm-r"><div><i class="fas fa-handshake" style="color:var(--pur);margin-right:6px;font-size:11px"></i>交接</div><div><div class="perm-t on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div><div><div class="perm-t off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div></div></div>
+</div>
+<div class="co info" style="margin-top:16px"><i class="fas fa-info-circle"></i><span>"交接给下阶段"权限允许Agent将产出文件推送到下一阶段Agent的工作目录，是Agent间协作的核心权限。</span></div>
+</div></div></section>
+<div class="sdv"></div>
+
+<!-- 项目Skill化 -->
+<section class="ds" id="sk">
+<div class="badge new"><i class="fas fa-cube"></i> 概念 NEW</div>
+<h2 class="st">项目 Skill 化</h2>
+<p class="ss">将项目本身作为 Skill 注册到 Agent 平台。Agent 被调度时读取 Skill 文件来"认识自己"。</p>
+<div class="sk-card"><h4><i class="fas fa-folder-tree"></i> 项目 Skill 文件结构</h4>
+<p>每个项目创建后在 <code>_project/</code> 下自动生成以下文件，是 Agent 自驱动的"操作系统"。</p>
+<div class="sft">
+<span class="sf"><i class="fas fa-folder-open" style="margin-right:6px"></i>_project/</span><span class="fn">自动生成</span><br>
+&nbsp;&nbsp;<span class="ff"><i class="fas fa-file-alt" style="margin-right:6px;color:var(--ac)"></i>collab-graph.md</span><span class="fd">— 人类可读的协作关系说明书</span><br>
+&nbsp;&nbsp;<span class="ff"><i class="fas fa-file-code" style="margin-right:6px;color:var(--pur)"></i>collab-graph.yaml</span><span class="fd">— Agent可解析的结构化配置</span><br>
+&nbsp;&nbsp;<span class="ff"><i class="fas fa-file-alt" style="margin-right:6px;color:var(--ok)"></i>skill-{agent-name}.md</span><span class="fd">— 每个Agent的角色说明书</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="fd" style="padding-left:24px">我是谁 · 我该怎么工作 · 输出后通知谁</span><br>
+&nbsp;&nbsp;<span class="ff"><i class="fas fa-file-alt" style="margin-right:6px;color:var(--info)"></i>drive-config.yaml</span><span class="fd">— 定时任务 + 通知触发器配置</span><br>
+&nbsp;&nbsp;<span class="ff"><i class="fas fa-file-alt" style="margin-right:6px;color:var(--err)"></i>handoff-log.md</span><span class="fd">— 交接日志</span>
+</div></div>
+<div class="cg c2" style="margin-top:16px">
+<div class="ic"><div class="ci" style="background:var(--pur-d);color:var(--pur)"><i class="fas fa-id-badge"></i></div><h4>Agent 自指导三问</h4><p>读取Skill文件后回答：<strong>我是谁</strong>（角色+职责）、<strong>我该怎么工作</strong>（输入/输出/规范）、<strong>做完之后怎么办</strong>（写交接文件+通知下一环节）。无需外部调度器。</p></div>
+<div class="ic"><div class="ci" style="background:var(--teal-d);color:var(--teal)"><i class="fas fa-file-export"></i></div><h4>交接文件协议</h4><p>Agent完成任务后必须写「交付说明.md」，包含：产出物列表、关键决策、下一阶段注意事项。这是Agent间"说话"的载体。</p></div>
+</div></section>
+<div class="sdv"></div>
+
+<!-- 自驱动机制 -->
+<section class="ds" id="dm">
+<div class="badge new"><i class="fas fa-cogs"></i> 概念 NEW</div>
+<h2 class="st">项目自驱动机制</h2>
+<p class="ss">两条驱动总线让项目持续运转：定时任务驱动周期性检查，用户确认通知驱动关键节点推进。</p>
+<div class="dg">
+<div class="dc"><div class="di" style="background:var(--teal-d);color:var(--teal)"><i class="fas fa-clock"></i></div><h4>定时任务驱动</h4><p>系统级调度器定期扫描项目状态，不需要用户在场。</p>
+<ul class="dl"><li><i class="fas fa-circle"></i>每30分钟检查新文件上传，触发分类Agent重新分析</li><li><i class="fas fa-circle"></i>每小时检查上一阶段Agent是否完成，自动激活下一阶段</li><li><i class="fas fa-circle"></i>每周生成进度摘要写入 _project/weekly-report.md</li><li><i class="fas fa-circle"></i>监控文件变更频率，停滞时标记并通知</li></ul></div>
+<div class="dc"><div class="di" style="background:var(--ac-d);color:var(--ac)"><i class="fas fa-bell"></i></div><h4>用户确认通知驱动</h4><p>关键节点必须等待人类确认才能推进。</p>
+<ul class="dl"><li><i class="fas fa-circle"></i>Agent完成需求分析后通知用户确认，确认后激活Design-Agent</li><li><i class="fas fa-circle"></i>Agent需访问无权限文件时通知审批，通过后自动补充上下文</li><li><i class="fas fa-circle"></i>阶段性产出需用户"验收签字"才算阶段完成</li><li><i class="fas fa-circle"></i>发现需求冲突时通知用户决策而非自行猜测</li></ul></div>
+</div>
+<div class="co pur" style="margin-top:20px"><i class="fas fa-project-diagram"></i><span><strong>混合驱动：</strong>定时任务负责"巡逻"检查条件，用户确认负责"放行"关键节点。两者结合构成「自动推进+人工兜底」模型。</span></div>
+<div class="mk" style="margin-top:20px"><div class="mk-tb"><div class="mk-dot r"></div><div class="mk-dot y"></div><div class="mk-dot g"></div><span>drive-config.yaml — 官网改版</span></div>
+<div class="mk-bd" style="padding:20px">
+<pre style="font-family:'Space Grotesk',monospace;font-size:12px;color:var(--fg-m);line-height:2;white-space:pre-wrap"><span style="color:var(--teal)">scheduled_tasks</span>:
+  - <span style="color:var(--fg)">name</span>: <span style="color:var(--ac)">"文件变更巡检"</span>
+    <span style="color:var(--fg)">interval</span>: <span style="color:var(--info)">"30m"</span>
+    <span style="color:var(--fg)">action</span>: <span style="color:var(--ac)">"触发分类Agent重新分析"</span>
+  - <span style="color:var(--fg)">name</span>: <span style="color:var(--ac)">"阶段推进检查"</span>
+    <span style="color:var(--fg)">interval</span>: <span style="color:var(--info)">"1h"</span>
+    <span style="color:var(--fg)">action</span>: <span style="color:var(--ac)">"写完成报告 → 通知用户确认"</span>
+
+<span style="color:var(--ac)">confirmation_gates</span>:
+  - <span style="color:var(--fg)">name</span>: <span style="color:var(--ac)">"PRD确认"</span>
+    <span style="color:var(--fg)">after</span>: <span style="color:var(--ac)">"PM-Agent 完成需求分析"</span>
+    <span style="color:var(--fg)">on_confirm</span>: <span style="color:var(--ac)">"激活 Design-Agent"</span>
+    <span style="color:var(--fg)">on_reject</span>: <span style="color:var(--ac)">"反馈写入 _project/feedback.md → PM-Agent修正"</span></pre>
+</div></div></section>
+<div class="sdv"></div>
+
+<!-- 业务流程 -->
+<section class="ds" id="fl">
+<div class="badge new"><i class="fas fa-magic"></i> 第4章</div>
+<h2 class="st">业务流程</h2>
+<p class="ss">核心流程全景。v2.1 新增"自然语言创建项目"作为入口流程。</p>
+<div class="tg"><button class="tgb act" onclick="switchTab(this,'fl1')">创建项目 <span style="font-size:9px;color:var(--pur)">NEW</span></button><button class="tgb" onclick="switchTab(this,'fl2')">上传与分类</button><button class="tgb" onclick="switchTab(this,'fl3')">Agent协作访问</button><button class="tgb" onclick="switchTab(this,'fl4')">手动分类</button></div>
+<div class="tp act" id="fl1">
+<div class="fc"><div class="fs">
+<div class="fst"><div class="fn">1</div><div class="fc2"><h5>自然语言描述</h5><p>用户一句话描述项目意图</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">2</div><div class="fc2"><h5>Agent解析结构</h5><p>推断阶段划分，生成文件夹+元数据目录</p><span class="act-tag a">Agent</span></div></div>
+<div class="fa-arrow dec"><span class="al">确认?</span><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">3</div><div class="fc2"><h5>Agent编排</h5><p>选择参与Agent，分配角色权限</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">4</div><div class="fc2"><h5>生成Skill文件</h5><p>协作图+技能说明+驱动配置</p><span class="act-tag s">系统</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">5</div><div class="fc2"><h5>项目就绪</h5><p>首个Agent被激活，通知用户</p><span class="act-tag m">混合驱动</span></div></div>
+</div></div></div>
+<div class="tp" id="fl2">
+<div class="fc"><div class="fs">
+<div class="fst"><div class="fn">1</div><div class="fc2"><h5>用户上传</h5><p>拖放/选择上传，立即可见</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">2</div><div class="fc2"><h5>Agent分析</h5><p>提取语义特征，计算相似度</p><span class="act-tag a">Agent</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">3</div><div class="fc2"><h5>推荐确认</h5><p>展示分类推荐，用户确认/修改/忽略</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">4</div><div class="fc2"><h5>索引更新</h5><p>写入逻辑索引，更新项目视图</p><span class="act-tag s">系统</span></div></div>
+</div></div></div>
+<div class="tp" id="fl3">
+<div class="fc"><div class="fs">
+<div class="fst"><div class="fn">1</div><div class="fc2"><h5>任务启动</h5><p>解析任务实体，确定候选文件集</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">2</div><div class="fc2"><h5>上下文聚合</h5><p>按语义排序聚合文件</p><span class="act-tag a">Agent</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">3</div><div class="fc2"><h5>权限检查</h5><p>无权限文件标记待授权，自动申请</p><span class="act-tag s">系统</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">4</div><div class="fc2"><h5>执行/等待</h5><p>有权限立即用，缺失等授权后补充</p><span class="act-tag a">Agent</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">5</div><div class="fc2"><h5>结束审计</h5><p>输出结果，记录访问日志</p><span class="act-tag s">系统</span></div></div>
+</div></div></div>
+<div class="tp" id="fl4">
+<div class="fc"><div class="fs">
+<div class="fst"><div class="fn">1</div><div class="fc2"><h5>创建/编辑项目</h5><p>手动创建项目，定义结构</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">2</div><div class="fc2"><h5>手动归类</h5><p>拖放文件到项目指定文件夹</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">3</div><div class="fc2"><h5>批量操作</h5><p>多选后批量关联/修改权限</p><span class="act-tag u">用户</span></div></div>
+<div class="fa-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+<div class="fst"><div class="fn">4</div><div class="fc2"><h5>规则反馈学习</h5><p>手动操作作为训练信号优化Agent</p><span class="act-tag s">系统</span></div></div>
+</div></div></div>
+</section>
+<div class="sdv"></div>
+
+<!-- 功能需求 -->
+<section class="ds" id="rq">
+<div class="badge def"><i class="fas fa-clipboard-list"></i> 第5章</div>
+<h2 class="st">产品功能需求</h2>
+<p class="ss">按模块定义功能点与详细描述，标注优先级。v2.1 新增项目创建与自驱动相关需求。</p>
+<div class="tg"><button class="tgb act" onclick="switchTab(this,'ru')">用户端</button><button class="tgb" onclick="switchTab(this,'ra')">Agent端</button></div>
+<div class="tp act" id="ru">
+<div class="rtw"><table class="rt"><thead><tr><th>模块</th><th>功能点</th><th>优先级</th><th>详细描述</th></tr></thead><tbody>
+<tr><td class="mn" rowspan="3">个人空间</td><td class="fn2">双视图切换</td><td><span class="rp p0">P0</span></td><td>顶部"我的空间"与"项目空间"一键切换，支持 Ctrl+P 快捷键。</td></tr>
+<tr><td class="fn2">文件上传</td><td><span class="rp p0">P0</span></td><td>多文件/文件夹拖放上传，进度条，上传后立即出现列表顶部。</td></tr>
+<tr><td class="fn2">搜索筛选</td><td><span class="rp p0">P0</span></td><td>全文搜索（文件名+语义），按类型/时间/项目筛选。P95 &lt; 300ms。</td></tr>
+<tr><td class="mn" rowspan="4">项目空间</td><td class="fn2">项目管理</td><td><span class="rp p0">P0</span></td><td>创建项目（名称+描述），编辑/归档/删除。列表按更新排序。</td></tr>
+<tr><td class="fn2">文件聚合展示</td><td><span class="rp p0">P0</span></td><td>逻辑引用聚合，同一文件可出现在多项目。显示来源用户和权限标签。</td></tr>
+<tr><td class="fn2">文件夹结构管理</td><td><span class="rp p1">P1</span></td><td>逻辑文件夹CRUD，拖拽排序，最多3层嵌套。不影响物理存储。</td></tr>
+<tr><td class="fn2">智能推荐关联</td><td><span class="rp p1">P1</span></td><td>文件详情面板展示Agent推荐关联文件，一键添加，推荐理由可解释。</td></tr>
+<tr><td class="mn" rowspan="3">权限管理</td><td class="fn2">动态权限申请</td><td><span class="rp p0">P0</span></td><td>Agent/协作者无权限时自动申请，拥有者一键审批，结果实时反馈。</td></tr>
+<tr><td class="fn2">可视化权限矩阵</td><td><span class="rp p1">P1</span></td><td>表格展示某成员在各目录的权限，支持快捷预设和逐项微调。</td></tr>
+<tr><td class="fn2">权限变更通知</td><td><span class="rp p1">P1</span></td><td>站内通知+可选邮件，包含变更摘要和操作人信息。</td></tr>
+<tr><td class="mn" rowspan="4" style="color:var(--pur)">项目创建<br><span style="font-size:10px;font-weight:400;color:var(--fg-d)">v2.1 新增</span></td><td class="fn2" style="color:var(--pur)">自然语言创建</td><td><span class="rp p0">P0</span></td><td>用户用自然语言描述项目，Agent解析意图生成项目结构+元数据目录。对话式确认。</td></tr>
+<tr><td class="fn2" style="color:var(--pur)">Agent编排选择</td><td><span class="rp p0">P0</span></td><td>从Agent目录选择参与Agent，定义角色和阶段归属。支持创建新Agent。</td></tr>
+<tr><td class="fn2" style="color:var(--pur)">协作关系图生成</td><td><span class="rp p0">P0</span></td><td>自动生成 collab-graph（MD+YAML），展示数据流、依赖、交接协议。可手动编辑。</td></tr>
+<tr><td class="fn2" style="color:var(--pur)">项目Skill注册</td><td><span class="rp p1">P1</span></td><td>将项目作为Skill注册到Agent平台，包含自指导信息和交接协议。</td></tr>
+<tr><td class="mn" rowspan="2" style="color:var(--teal)">自驱动<br><span style="font-size:10px;font-weight:400;color:var(--fg-d)">v2.1 新增</span></td><td class="fn2" style="color:var(--teal)">定时任务配置</td><td><span class="rp p1">P1</span></td><td>配置周期性巡检任务（文件变更、阶段推进、周报生成）。drive-config.yaml可视化编辑。</td></tr>
+<tr><td class="fn2" style="color:var(--teal)">确认门控管理</td><td><span class="rp p0">P0</span></td><td>定义关键确认节点（PRD确认、设计确认等），配置确认/拒绝后的动作链。</td></tr>
+<tr><td class="mn" rowspan="2">进阶功能</td><td class="fn2">批量操作</td><td><span class="rp p2">P2</span></td><td>多选文件批量关联/修改权限/移除，5分钟内可撤销。</td></tr>
+<tr><td class="fn2">操作审计</td><td><span class="rp p2">P2</span></td><td>记录分类变更、权限变更、交接日志。按时间/人/类型筛选。保留90天。</td></tr>
+</tbody></table></div></div>
+<div class="tp" id="ra">
+<div class="rtw"><table class="rt"><thead><tr><th>模块</th><th>需求</th><th>优先级</th><th>详细描述</th></tr></thead><tbody>
+<tr><td class="mn" rowspan="2">文件抽象层</td><td class="fn2">逻辑索引</td><td><span class="rp p0">P0</span></td><td>SQLite-VSS存储元数据+向量+关联关系。kNN搜索，更新延迟 &lt; 500ms。</td></tr>
+<tr><td class="fn2">VFS适配器</td><td><span class="rp p0">P0</span></td><td>OpenClaw VFS扩展，统一本地/S3/WebDAV。Agent通过逻辑路径访问。</td></tr>
+<tr><td class="mn" rowspan="2">权限代理</td><td class="fn2">检查中间件</td><td><span class="rp p0">P0</span></td><td>RBAC+ABAC混合，缓存TTL=60s，命中率 &gt; 95%。</td></tr>
+<tr><td class="fn2">申请代理</td><td><span class="rp p0">P0</span></td><td>无权限自动申请，含理由。支持批量，超时24h自动取消。</td></tr>
+<tr><td class="mn" rowspan="2">嵌入引擎</td><td class="fn2">内容嵌入</td><td><span class="rp p0">P0</span></td><td>nomic-embed-text-v1.5（768维），图片用CLIP。本地部署。</td></tr>
+<tr><td class="fn2">分类推荐</td><td><span class="rp p0">P0</span></td><td>相似度阈值0.75自动推荐，用户反馈微调。</td></tr>
+<tr><td class="mn" style="color:var(--pur)">Skill引擎<br><span style="font-size:10px;font-weight:400;color:var(--fg-d)">v2.1</span></td><td class="fn2" style="color:var(--pur)">Skill解析与注入</td><td><span class="rp p0">P0</span></td><td>Agent启动时自动加载项目Skill文件，注入角色认知和交接协议到系统提示词。</td></tr>
+<tr><td class="mn" style="color:var(--teal)">驱动引擎<br><span style="font-size:10px;font-weight:400;color:var(--fg-d)">v2.1</span></td><td class="fn2" style="color:var(--teal)">调度执行器</td><td><span class="rp p1">P1</span></td><td>解析drive-config.yaml，执行定时任务和确认门控。WebSocket推送通知。</td></tr>
+</tbody></table></div></div>
+</section>
+<div class="sdv"></div>
+
+<!-- 非功能需求 -->
+<section class="ds" id="nf">
+<div class="badge def"><i class="fas fa-tachometer-alt"></i> 第6章</div>
+<h2 class="st">非功能需求</h2>
+<div class="nfg">
+<div class="nc"><div class="ni" style="background:var(--ac-d);color:var(--ac)"><i class="fas fa-bolt"></i></div><h4>性能</h4><ul class="nl"><li><i class="fas fa-circle"></i>分类推荐 P95 &lt; 500ms</li><li><i class="fas fa-circle"></i>全文搜索 P95 &lt; 300ms</li><li><i class="fas fa-circle"></i>列表刷新 &lt; 200ms</li><li><i class="fas fa-circle"></i>权限缓存命中 &gt; 95%</li><li><i class="fas fa-circle"></i>支持 10,000+ 文件流畅</li></ul></div>
+<div class="nc"><div class="ni" style="background:rgba(88,166,255,.12);color:var(--info)"><i class="fas fa-laptop"></i></div><h4>兼容性</h4><ul class="nl"><li><i class="fas fa-circle"></i>Chrome 90+ / Firefox 88+ / Safari 15+</li><li><i class="fas fa-circle"></i>移动端 iOS Safari 15+ / Android Chrome 90+</li><li><i class="fas fa-circle"></i>最小 375px 宽度响应式</li><li><i class="fas fa-circle"></i>单文件 500MB，批量 2GB</li></ul></div>
+<div class="nc"><div class="ni" style="background:rgba(248,81,73,.12);color:var(--err)"><i class="fas fa-lock"></i></div><h4>安全性</h4><ul class="nl"><li><i class="fas fa-circle"></i>权限变更需用户确认</li><li><i class="fas fa-circle"></i>Agent权限申请需显式审批</li><li><i class="fas fa-circle"></i>操作写入不可篡改审计日志</li><li><i class="fas fa-circle"></i>TLS 1.3 全程加密</li><li><i class="fas fa-circle"></i>向量存储与文件存储隔离</li><li><i class="fas fa-circle"></i>GDPR合规（导出+注销）</li></ul></div>
+</div></section>
+<div class="sdv"></div>
+
+<!-- 工具选型 -->
+<section class="ds" id="tl">
+<div class="badge def"><i class="fas fa-wrench"></i> 第7章</div>
+<h2 class="st">工具选型</h2>
+<p class="ss">优先可本地部署方案，避免数据外泄。</p>
+<div class="tgg">
+<div class="tc2"><div class="ti"><i class="fas fa-database"></i></div><div><h4>SQLite-VSS</h4><p class="tp2">逻辑索引与向量存储。轻量嵌入式。</p><div><span class="tt">kNN</span><span class="tt">嵌入式</span></div></div></div>
+<div class="tc2"><div class="ti"><i class="fas fa-brain"></i></div><div><h4>nomic-embed-text-v1.5</h4><p class="tp2">文本嵌入，768维，中文支持，可本地部署。</p><div><span class="tt">768d</span><span class="tt">本地</span></div></div></div>
+<div class="tc2"><div class="ti"><i class="fas fa-folder-open"></i></div><div><h4>OpenClaw VFS</h4><p class="tp2">虚拟文件系统抽象层，统一多后端访问。</p><div><span class="tt">VFS</span><span class="tt">多后端</span></div></div></div>
+<div class="tc2"><div class="ti"><i class="fas fa-image"></i></div><div><h4>CLIP ViT-B/32</h4><p class="tp2">多模态嵌入，图片语义理解，与文本共享向量空间。</p><div><span class="tt">multimodal</span><span class="tt">CLIP</span></div></div></div>
+</div>
+<div class="co ok" style="margin-top:20px"><i class="fas fa-check-circle"></i><span><strong>选型原则：</strong>所有嵌入模型支持量化后在 4GB VRAM GPU 运行。驱动引擎基于 APScheduler 或 Temporal 实现。</span></div>
+</section>
+
+<div class="sdv"></div>
+<div style="text-align:center;padding:32px 0;color:var(--fg-d);font-size:12px">
+<p>Agent协作文件系统 UI/UX设计与PRD — v2.1</p>
+<p style="margin-top:4px">本文档为内部机密资料</p>
+<p style="margin-top:12px;color:var(--ac)">— 文档结束 —</p>
+</div>
+
+</div></div>
+
+<button class="btt" id="btt" aria-label="顶部"><i class="fas fa-arrow-up"></i></button>
+<div id="toast"></div>
+
+<script>
+var spf=document.getElementById('spf'),btt=document.getElementById('btt'),sb=document.getElementById('sb'),sbo=document.getElementById('sbo'),mtg=document.getElementById('mtg'),csec=document.getElementById('csec');
+var nis=document.querySelectorAll('.ni'),sids=Array.from(nis).map(function(n){return n.getAttribute('data-s')});
+
+function usp(){var s=window.scrollY,d=document.documentElement.scrollHeight-window.innerHeight,p=d>0?(s/d)*100:0;spf.style.width=p+'%';btt.classList.toggle('vis',s>400)}
+
+function uan(){var cur='ov';for(var i=0;i<sids.length;i++){var el=document.getElementById(sids[i]);if(el&&el.getBoundingClientRect().top<=120)cur=sids[i]}
+nis.forEach(function(n){n.classList.toggle('act',n.getAttribute('data-s')===cur)});
+var ai=document.querySelector('.ni[data-s="'+cur+'"]');if(ai&&csec)csec.textContent=ai.textContent.trim().replace('NEW','').trim()}
+
+var tk=false;
+window.addEventListener('scroll',function(){if(!tk){requestAnimationFrame(function(){usp();uan();tk=false});tk=true}});
+
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)e.target.classList.add('vis')})},{threshold:.08,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.ds').forEach(function(s){io.observe(s)});
+
+btt.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});
+mtg.addEventListener('click',function(){sb.classList.toggle('open');sbo.classList.toggle('open')});
+sbo.addEventListener('click',function(){sb.classList.remove('open');sbo.classList.remove('open')});
+nis.forEach(function(n){n.addEventListener('click',function(){if(window.innerWidth<=1024){sb.classList.remove('open');sbo.classList.remove('open')}})});
+
+function switchTab(btn,id){var g=btn.parentElement;g.querySelectorAll('.tgb').forEach(function(b){b.classList.remove('act')});btn.classList.add('act');
+var p=g.parentElement;p.querySelectorAll('.tp').forEach(function(t){t.classList.remove('act')});var el=document.getElementById(id);if(el)el.classList.add('act')}
+
+function showToast(msg,icon,color){var t=document.getElementById('toast');t.innerHTML='<i class="'+icon+'" style="color:'+color+'"></i> '+msg;
+t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';t.style.pointerEvents='auto';
+clearTimeout(t._t);t._t=setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(80px)';t.style.pointerEvents='none'},2800)}
+
+document.querySelectorAll('.chip').forEach(function(c){c.addEventListener('click',function(){this.parentElement.querySelectorAll('.chip').forEach(function(x){x.classList.remove('act')});this.classList.add('act')})});
+
+usp();uan();
+</script>
+</body>
+</html>

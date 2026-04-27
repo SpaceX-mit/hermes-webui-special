@@ -455,7 +455,7 @@ class OpenClawProvider(IAgentProvider):
             from api.models import get_session
             s = get_session(session_id)
             if s and hasattr(s, 'profile') and s.profile:
-                for emp in list_employees().get('employees', []):
+                for emp in list_employees():
                     if emp.get('profile_name') == s.profile and emp.get('agent_provider') == 'openclaw':
                         openclaw_agent_id = emp['profile_name']
                         break

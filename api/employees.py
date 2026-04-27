@@ -38,7 +38,7 @@ def _save_employees(data):
 
 
 def list_employees():
-    return _load_employees()
+    return _load_employees().get('employees', [])
 
 
 # ── Profile helpers ────────────────────────────────────────────────────────

@@ -130,6 +130,10 @@ def main() -> None:
     # Start file watcher for auto-versioning
     start_file_watcher()
 
+    # Start AgentFS background services
+    from api.startup import start_agentfs_services
+    start_agentfs_services()
+
     # ── TLS/HTTPS setup (optional) ─────────────────────────────────────────
     from api.config import TLS_ENABLED, TLS_CERT, TLS_KEY
     scheme = 'https' if TLS_ENABLED else 'http'
