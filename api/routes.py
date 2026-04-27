@@ -99,6 +99,13 @@ def _derive_lifecycle(provider: str, is_active: bool, agent_status: dict) -> str
     return 'offline'
 
 
+def _oc_cron_client():
+    """Return (gw_conn, cfg) for OpenClaw cron operations."""
+    from api.providers.openclaw_provider import _gw_conn, _get_openclaw_config
+    cfg = _get_openclaw_config()
+    return _gw_conn, cfg
+
+
 def _check_csrf(handler) -> bool:
     """Reject cross-origin POST requests. Returns True if OK."""
     origin = handler.headers.get("Origin", "")
@@ -629,7 +636,21 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/crons":
         from cron.jobs import list_jobs
 
-        return j(handler, {"jobs": list_jobs(include_disabled=True)})
+        jobs = [dict(j, agent_platform="hermes") for j in list_jobs(include_disabled=True)]
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+
+            async def _list():
+                return await client._gateway.call("cron.list", {"includeDisabled": True})
+
+            result = gw_conn.run(_list(), timeout=10)
+            for oc_job in result.get("jobs", []):
+                oc_job["agent_platform"] = "openclaw"
+                jobs.append(oc_job)
+        except Exception:
+            pass
+        return j(handler, {"jobs": jobs})
 
     if parsed.path == "/api/crons/output":
         return _handle_cron_output(handler, parsed)
@@ -2414,13 +2435,35 @@ def _handle_approval_inject(handler, parsed):
 
 
 def _handle_cron_output(handler, parsed):
-    from cron.jobs import OUTPUT_DIR as CRON_OUT
-
     qs = parse_qs(parsed.query)
     job_id = qs.get("job_id", [""])[0]
     limit = int(qs.get("limit", ["5"])[0])
+    agent_platform = qs.get("agent_platform", [""])[0]
     if not job_id:
         return j(handler, {"error": "job_id required"}, status=400)
+
+    if agent_platform == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+
+            async def _runs():
+                return await client._gateway.call(
+                    "cron.runs", {"id": job_id, "limit": limit}
+                )
+
+            result = gw_conn.run(_runs(), timeout=10)
+            outputs = []
+            for run in result.get("runs", []):
+                summary = run.get("summary") or run.get("output") or ""
+                ts = run.get("startedAtMs", 0)
+                outputs.append({"filename": f"{ts}.md", "content": str(summary)[:8000]})
+            return j(handler, {"job_id": job_id, "outputs": outputs})
+        except Exception as e:
+            return j(handler, {"job_id": job_id, "outputs": [], "error": str(e)})
+
+    from cron.jobs import OUTPUT_DIR as CRON_OUT
+
     out_dir = CRON_OUT / job_id
     outputs = []
     if out_dir.exists():
@@ -2440,12 +2483,13 @@ def _handle_cron_recent(handler, parsed):
 
     qs = parse_qs(parsed.query)
     since = float(qs.get("since", ["0"])[0])
+    completions = []
+
+    # Hermes jobs
     try:
         from cron.jobs import list_jobs
 
-        jobs = list_jobs(include_disabled=True)
-        completions = []
-        for job in jobs:
+        for job in list_jobs(include_disabled=True):
             last_run = job.get("last_run_at")
             if not last_run:
                 continue
@@ -2459,17 +2503,43 @@ def _handle_cron_recent(handler, parsed):
             else:
                 ts = float(last_run)
             if ts > since:
-                completions.append(
-                    {
-                        "job_id": job.get("id", ""),
-                        "name": job.get("name", "Unknown"),
-                        "status": job.get("last_status", "unknown"),
-                        "completed_at": ts,
-                    }
-                )
-        return j(handler, {"completions": completions, "since": since})
+                completions.append({
+                    "job_id": job.get("id", ""),
+                    "name": job.get("name", "Unknown"),
+                    "status": job.get("last_status", "unknown"),
+                    "completed_at": ts,
+                    "agent_platform": "hermes",
+                })
     except ImportError:
-        return j(handler, {"completions": [], "since": since})
+        pass
+
+    # OpenClaw jobs — query recent runs from gateway
+    try:
+        gw_conn, cfg = _oc_cron_client()
+        client, _ = gw_conn.get(cfg)
+
+        async def _oc_list():
+            return await client._gateway.call("cron.list", {"includeDisabled": True})
+
+        oc_result = gw_conn.run(_oc_list(), timeout=10)
+        for job in oc_result.get("jobs", []):
+            state = job.get("state") or {}
+            last_run_ms = state.get("lastRunAtMs")
+            if not last_run_ms:
+                continue
+            ts = last_run_ms / 1000.0
+            if ts > since:
+                completions.append({
+                    "job_id": job.get("id", ""),
+                    "name": job.get("name", "Unknown"),
+                    "status": state.get("lastRunStatus", "unknown"),
+                    "completed_at": ts,
+                    "agent_platform": "openclaw",
+                })
+    except Exception:
+        pass
+
+    return j(handler, {"completions": completions, "since": since})
 
 
 def _handle_memory_read(handler):
@@ -2703,6 +2773,8 @@ def _handle_chat_sync(handler, body):
 
 
 def _handle_cron_create(handler, body):
+    if body.get("agent_platform") == "openclaw":
+        return _handle_cron_create_openclaw(handler, body)
     try:
         require(body, "prompt", "schedule")
     except ValueError as e:
@@ -2718,6 +2790,55 @@ def _handle_cron_create(handler, body):
             skills=body.get("skills") or [],
             model=body.get("model") or None,
         )
+        job["agent_platform"] = "hermes"
+        return j(handler, {"ok": True, "job": job})
+    except Exception as e:
+        return j(handler, {"error": str(e)}, status=400)
+
+
+def _handle_cron_create_openclaw(handler, body):
+    try:
+        require(body, "prompt", "schedule", "name")
+    except ValueError as e:
+        return bad(handler, str(e))
+    try:
+        gw_conn, cfg = _oc_cron_client()
+        client, _ = gw_conn.get(cfg)
+
+        # schedule: string → {kind:"cron", expr:...}
+        schedule = body["schedule"]
+        if isinstance(schedule, str):
+            schedule = {"kind": "cron", "expr": schedule}
+
+        # payload
+        payload: dict = {"kind": "agentTurn", "message": body["prompt"]}
+        if body.get("model"):
+            payload["model"] = body["model"]
+        if body.get("tools_allow"):
+            payload["toolsAllow"] = body["tools_allow"]
+        if body.get("timeout_seconds"):
+            payload["timeoutSeconds"] = int(body["timeout_seconds"])
+
+        params: dict = {
+            "name": body["name"],
+            "schedule": schedule,
+            "sessionTarget": body.get("session_target") or "isolated",
+            "wakeMode": body.get("wake_mode") or "now",
+            "payload": payload,
+            "enabled": body.get("enabled", True),
+        }
+        if body.get("agent_id"):
+            params["agentId"] = body["agent_id"]
+        if body.get("description"):
+            params["description"] = body["description"]
+        if body.get("repeat") == 1 or body.get("delete_after_run"):
+            params["deleteAfterRun"] = True
+
+        async def _create():
+            return await client._gateway.call("cron.add", params)
+
+        job = gw_conn.run(_create(), timeout=15)
+        job["agent_platform"] = "openclaw"
         return j(handler, {"ok": True, "job": job})
     except Exception as e:
         return j(handler, {"error": str(e)}, status=400)
@@ -2728,10 +2849,26 @@ def _handle_cron_update(handler, body):
         require(body, "job_id")
     except ValueError as e:
         return bad(handler, str(e))
+    job_id = body["job_id"]
+    if body.get("agent_platform") == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+            patch = {k: v for k, v in body.items()
+                     if k not in ("job_id", "agent_platform") and v is not None}
+
+            async def _update():
+                return await client._gateway.call("cron.update", {"id": job_id, "patch": patch})
+
+            result = gw_conn.run(_update(), timeout=15)
+            result["agent_platform"] = "openclaw"
+            return j(handler, {"ok": True, "job": result})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=400)
     from cron.jobs import update_job
 
-    updates = {k: v for k, v in body.items() if k != "job_id" and v is not None}
-    job = update_job(body["job_id"], updates)
+    updates = {k: v for k, v in body.items() if k not in ("job_id", "agent_platform") and v is not None}
+    job = update_job(job_id, updates)
     if not job:
         return bad(handler, "Job not found", 404)
     return j(handler, {"ok": True, "job": job})
@@ -2742,18 +2879,44 @@ def _handle_cron_delete(handler, body):
         require(body, "job_id")
     except ValueError as e:
         return bad(handler, str(e))
+    job_id = body["job_id"]
+    if body.get("agent_platform") == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+
+            async def _remove():
+                return await client._gateway.call("cron.remove", {"id": job_id})
+
+            gw_conn.run(_remove(), timeout=10)
+            return j(handler, {"ok": True, "job_id": job_id})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=400)
     from cron.jobs import remove_job
 
-    ok = remove_job(body["job_id"])
+    ok = remove_job(job_id)
     if not ok:
         return bad(handler, "Job not found", 404)
-    return j(handler, {"ok": True, "job_id": body["job_id"]})
+    return j(handler, {"ok": True, "job_id": job_id})
 
 
 def _handle_cron_run(handler, body):
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
+    if body.get("agent_platform") == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+            mode = body.get("mode") or "force"
+
+            async def _run():
+                return await client._gateway.call("cron.run", {"id": job_id, "mode": mode})
+
+            gw_conn.run(_run(), timeout=15)
+            return j(handler, {"ok": True, "job_id": job_id, "status": "triggered"})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=400)
     from cron.jobs import get_job
     from cron.scheduler import run_job
 
@@ -2768,6 +2931,21 @@ def _handle_cron_pause(handler, body):
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
+    if body.get("agent_platform") == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+
+            async def _pause():
+                return await client._gateway.call(
+                    "cron.update", {"id": job_id, "patch": {"enabled": False}}
+                )
+
+            result = gw_conn.run(_pause(), timeout=10)
+            result["agent_platform"] = "openclaw"
+            return j(handler, {"ok": True, "job": result})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=400)
     from cron.jobs import pause_job
 
     result = pause_job(job_id, reason=body.get("reason"))
@@ -2780,6 +2958,21 @@ def _handle_cron_resume(handler, body):
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
+    if body.get("agent_platform") == "openclaw":
+        try:
+            gw_conn, cfg = _oc_cron_client()
+            client, _ = gw_conn.get(cfg)
+
+            async def _resume():
+                return await client._gateway.call(
+                    "cron.update", {"id": job_id, "patch": {"enabled": True}}
+                )
+
+            result = gw_conn.run(_resume(), timeout=10)
+            result["agent_platform"] = "openclaw"
+            return j(handler, {"ok": True, "job": result})
+        except Exception as e:
+            return j(handler, {"error": str(e)}, status=400)
     from cron.jobs import resume_job
 
     result = resume_job(job_id)
