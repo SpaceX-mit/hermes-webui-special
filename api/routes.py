@@ -2772,6 +2772,30 @@ def _handle_chat_sync(handler, body):
     )
 
 
+def _normalize_hermes_schedule(schedule) -> str:
+    """Convert OpenClaw schedule object to Hermes schedule string."""
+    if isinstance(schedule, str):
+        return schedule
+    if not isinstance(schedule, dict):
+        return str(schedule)
+    kind = schedule.get("kind", "")
+    if kind == "cron":
+        return schedule.get("expr", "")
+    if kind == "every":
+        ms = schedule.get("everyMs", 0)
+        minutes = int(ms / 60000)
+        if minutes % 1440 == 0:
+            return f"every {minutes // 1440}d"
+        if minutes % 60 == 0:
+            return f"every {minutes // 60}h"
+        return f"every {minutes}m"
+    if kind == "at":
+        at = schedule.get("at", "")
+        # relative like "5m" → pass through; absolute ISO → pass through
+        return at
+    return str(schedule)
+
+
 def _handle_cron_create(handler, body):
     if body.get("agent_platform") == "openclaw":
         return _handle_cron_create_openclaw(handler, body)
@@ -2784,7 +2808,7 @@ def _handle_cron_create(handler, body):
 
         job = create_job(
             prompt=body["prompt"],
-            schedule=body["schedule"],
+            schedule=_normalize_hermes_schedule(body["schedule"]),
             name=body.get("name") or None,
             deliver=body.get("deliver") or "local",
             skills=body.get("skills") or [],
