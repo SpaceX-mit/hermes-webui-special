@@ -77,6 +77,7 @@ class HermesAgent(IAgent):
             stream_delta_callback=on_token,
             tool_progress_callback=on_tool,
         )
+        self._interrupted = False
 
     @property
     def raw_agent(self):
@@ -116,6 +117,7 @@ class HermesAgent(IAgent):
             self._agent.interrupt(reason)
         except Exception:
             pass
+        self._interrupted = True
 
     def get_usage(self):
         a = self._agent
@@ -131,12 +133,39 @@ class HermesAgent(IAgent):
         )
 
     def get_status(self) -> dict:
+        import json as _json
+        from api.profiles import get_active_hermes_home
+
         usage = self.get_usage()
+        a = self._agent
+
+        # context usage percent
+        usage_pct = 0.0
+        if usage.context_length and usage.last_prompt_tokens:
+            usage_pct = round(usage.last_prompt_tokens / usage.context_length, 4)
+
+        # read gateway_state.json from active HERMES_HOME
+        gw: dict = {}
+        try:
+            gw_path = get_active_hermes_home() / 'gateway_state.json'
+            if gw_path.exists():
+                gw = _json.loads(gw_path.read_text()) or {}
+        except Exception:
+            pass
+
         return {
             'input_tokens': usage.input_tokens,
             'output_tokens': usage.output_tokens,
+            'cache_read_tokens': getattr(a, 'session_cache_read_tokens', 0) or 0,
+            'cache_write_tokens': getattr(a, 'session_cache_write_tokens', 0) or 0,
             'estimated_cost_usd': usage.estimated_cost_usd,
+            'cost_status': getattr(a, 'session_cost_status', 'estimated') or 'estimated',
             'context_length': usage.context_length,
-            'compression_count': usage.compression_count,
+            'usage_percent': usage_pct,
             'last_prompt_tokens': usage.last_prompt_tokens,
+            'compression_count': usage.compression_count,
+            'interrupted': self._interrupted,
+            'gateway_state': gw.get('gateway_state'),
+            'active_agents': gw.get('active_agents', 0),
+            'exit_reason': gw.get('exit_reason'),
         }

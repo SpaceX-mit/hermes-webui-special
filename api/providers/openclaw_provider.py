@@ -493,6 +493,7 @@ class OpenClawAgent(IAgent):
         self._cfg = cfg or {'gateway_url': gateway_url, 'api_key': gateway_key or ''}
         self._usage = AgentUsage()
         self._interrupted = False
+        self._stop_reason: str | None = None
 
     def run(self, user_message, system_message, conversation_history,
             session_id, personality=None):
@@ -561,11 +562,16 @@ class OpenClawAgent(IAgent):
                                 input_tokens=tu.get('input', 0),
                                 output_tokens=tu.get('output', 0),
                             )
+                        state = payload.get('state', '') if isinstance(payload, dict) else ''
+                        self._stop_reason = 'aborted' if state == 'aborted' else (
+                            payload.get('stopReason') or 'complete' if isinstance(payload, dict) else 'complete'
+                        )
                         break
 
                     elif et == EventType.ERROR:
                         payload = data.get('payload', data) if isinstance(data, dict) else {}
                         err_msg = payload.get('message', str(data)) if isinstance(payload, dict) else str(data)
+                        self._stop_reason = 'error'
                         raise RuntimeError(f'OpenClaw error: {err_msg}')
 
                 # Fallback usage from agent result
@@ -593,6 +599,8 @@ class OpenClawAgent(IAgent):
             result_text, usage = asyncio.run(
                 self._execute_fallback(full_message)
             )
+            if not self._stop_reason:
+                self._stop_reason = 'error'
 
         self._usage = usage
 
@@ -675,16 +683,47 @@ class OpenClawAgent(IAgent):
 
     def interrupt(self, reason):
         self._interrupted = True
+        self._stop_reason = 'aborted'
 
     def get_usage(self):
         return self._usage
 
     def get_status(self) -> dict:
+        sdk_status = 'unknown'
+        aborted_last_run = False
+        try:
+            client, _ = _gw_conn.get(self._cfg)
+            agent_obj = client.get_agent(self._openclaw_agent_id)
+            session_key = self._openclaw_session_key
+
+            async def _fetch():
+                s = await agent_obj.get_status()
+                aborted = False
+                if session_key:
+                    try:
+                        info = await client.gateway.call(
+                            'sessions.resolve', {'key': session_key}
+                        )
+                        aborted = bool(info.get('abortedLastRun', False))
+                    except Exception:
+                        pass
+                return s, aborted
+
+            status_enum, aborted_last_run = _gw_conn.run(_fetch(), timeout=10)
+            sdk_status = status_enum.value
+        except Exception:
+            pass
+
         return {
             'openclaw_agent_id': self._openclaw_agent_id,
             'gateway_url': self._gateway_url,
+            'openclaw_session_key': self._openclaw_session_key,
+            'sdk_status': sdk_status,
             'interrupted': self._interrupted,
+            'stop_reason': self._stop_reason,
+            'aborted_last_run': aborted_last_run,
             'input_tokens': self._usage.input_tokens,
             'output_tokens': self._usage.output_tokens,
-            'openclaw_session_key': self._openclaw_session_key,
+            'cache_read_tokens': getattr(self._usage, 'cache_read_tokens', 0) or 0,
+            'estimated_cost_usd': getattr(self._usage, 'estimated_cost_usd', 0) or 0,
         }

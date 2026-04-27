@@ -57,6 +57,48 @@ from api.helpers import (
 import re as _re
 
 
+def _derive_lifecycle(provider: str, is_active: bool, agent_status: dict) -> str:
+    """Derive a unified 7-state agent_lifecycle from provider-specific status."""
+    if provider == 'hermes':
+        gw = agent_status.get('gateway_state')
+        if not gw:
+            return 'offline'
+        if gw == 'starting':
+            return 'starting'
+        if gw == 'startup_failed':
+            return 'error'
+        if gw == 'draining':
+            return 'stopping'
+        if gw == 'stopped':
+            return 'offline'
+        if gw == 'running':
+            if is_active:
+                return 'running'
+            if agent_status.get('interrupted'):
+                return 'interrupted'
+            return 'idle'
+        return 'offline'
+    elif provider == 'openclaw':
+        sdk = agent_status.get('sdk_status', '')
+        if sdk == 'error':
+            return 'error'
+        if sdk == 'deleted':
+            return 'offline'
+        if is_active:
+            return 'interrupted' if agent_status.get('interrupted') else 'running'
+        stop = agent_status.get('stop_reason')
+        if stop == 'aborted' or agent_status.get('aborted_last_run'):
+            return 'interrupted'
+        if stop in ('error', 'timeout'):
+            return 'error'
+        if sdk in ('idle', 'created', ''):
+            return 'idle'
+        if sdk == 'running':
+            return 'running'
+        return 'offline'
+    return 'offline'
+
+
 def _check_csrf(handler) -> bool:
     """Reject cross-origin POST requests. Returns True if OK."""
     origin = handler.headers.get("Origin", "")
@@ -462,8 +504,92 @@ def handle_get(handler, parsed) -> bool:
                     entry['agent_status'] = iagent.get_status()
                 except Exception:
                     entry['agent_status'] = {}
+            entry['agent_lifecycle'] = _derive_lifecycle(
+                meta.get('provider', ''), True, entry.get('agent_status', {})
+            )
             agents.append(entry)
         return j(handler, {'agents': agents, 'count': len(agents)})
+
+    if parsed.path == "/api/agent/lifecycle":
+        import json as _json
+        import time as _time
+        from api.employees import list_employees
+        from api.profiles import _DEFAULT_HERMES_HOME
+
+        qp = parse_qs(parsed.query)
+        filter_session = qp.get("session_id", [""])[0]
+        filter_provider = qp.get("provider", [""])[0]
+
+        with STREAMS_LOCK:
+            meta_snapshot = dict(AGENT_META)
+            inst_snapshot = dict(AGENT_INSTANCES)
+
+        # Build a map: session_id -> (is_active, agent_status)
+        active_map: dict = {}
+        for sid, meta in meta_snapshot.items():
+            sess = meta.get('session_id', '')
+            iagent = inst_snapshot.get(sid)
+            is_active = False
+            agent_status: dict = {}
+            if iagent:
+                try:
+                    agent_status = iagent.get_status()
+                except Exception:
+                    pass
+            active_map[sess] = (True, agent_status, meta.get('provider', ''))
+
+        result = []
+        for emp in list_employees():
+            emp_id = emp.get('id', '')
+            provider = emp.get('agent_provider', 'hermes')
+            profile_name = emp.get('profile_name', 'default')
+            session_id = emp.get('session_id', emp_id)
+
+            if filter_session and session_id != filter_session:
+                continue
+            if filter_provider and provider != filter_provider:
+                continue
+
+            is_active, agent_status, _ = active_map.get(session_id, (False, {}, provider))
+
+            # For inactive hermes agents, read gateway_state.json directly
+            if not is_active and provider == 'hermes':
+                try:
+                    if profile_name == 'default':
+                        gw_path = _DEFAULT_HERMES_HOME / 'gateway_state.json'
+                    else:
+                        gw_path = _DEFAULT_HERMES_HOME / 'profiles' / profile_name / 'gateway_state.json'
+                        if not gw_path.exists():
+                            gw_path = _DEFAULT_HERMES_HOME / 'gateway_state.json'
+                    if gw_path.exists():
+                        gw = _json.loads(gw_path.read_text()) or {}
+                        agent_status = {
+                            'gateway_state': gw.get('gateway_state'),
+                            'active_agents': gw.get('active_agents', 0),
+                            'exit_reason': gw.get('exit_reason'),
+                            'interrupted': False,
+                            'updated_at': gw.get('updated_at'),
+                        }
+                except Exception:
+                    pass
+
+            lifecycle = _derive_lifecycle(provider, is_active, agent_status)
+
+            entry = {
+                'employee_id': emp_id,
+                'employee_name': emp.get('name', ''),
+                'session_id': session_id,
+                'provider': provider,
+                'agent_lifecycle': lifecycle,
+                'is_active': is_active,
+                'gateway_state': agent_status.get('gateway_state'),
+                'active_agents': agent_status.get('active_agents', 0),
+                'last_stop_reason': agent_status.get('stop_reason') or agent_status.get('exit_reason'),
+                'updated_at': agent_status.get('updated_at'),
+            }
+            result.append(entry)
+
+        return j(handler, {'lifecycle': result, 'count': len(result)})
 
     if parsed.path == "/api/chat/cancel":
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
